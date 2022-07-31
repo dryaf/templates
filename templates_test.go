@@ -1,0 +1,129 @@
+package templates_test
+
+import (
+	"os"
+	"strings"
+	"testing"
+
+	testable "github.com/dryaf/templates"
+)
+
+var tmpls *testable.Templates
+
+func TestMain(m *testing.M) {
+	tmpls = testable.New(nil, "./test_files", nil)
+	tmpls.MustParseTemplates()
+	exitVal := m.Run()
+	os.Exit(exitVal)
+}
+
+func failOnErr(t *testing.T, err error) {
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func Test_DefaultLayout(t *testing.T) {
+	res, err := tmpls.ExecuteTemplateAsText(nil, "sample_page", "test")
+	failOnErr(t, err)
+
+	if strings.Contains(res, "Special-Layout:test") ||
+		!strings.Contains(res, "Sample-Page:test") ||
+		!strings.Contains(res, "Sample-Block:via_block") ||
+		!strings.Contains(res, "Sample-Block:via_d_block") {
+		t.Error(res)
+		t.Error("test railed, maybe layout was rendered ")
+	}
+}
+
+func Test_Layout(t *testing.T) {
+	res, err := tmpls.ExecuteTemplateAsText(nil, "special:sample_page", "test")
+	failOnErr(t, err)
+	if !strings.Contains(res, "Special-Layout:test") ||
+		!strings.Contains(res, "Sample-Page:test") ||
+		!strings.Contains(res, "Sample-Block:via_block") ||
+		!strings.Contains(res, "Sample-Block:via_d_block") {
+		t.Error(res)
+		t.Error("Didn't contain strings ")
+	}
+}
+
+func Test_render_page_only(t *testing.T) {
+	res, err := tmpls.ExecuteTemplateAsText(nil, ":sample_page", "test")
+	failOnErr(t, err)
+	if strings.Contains(res, "Layout-Full:test") == false &&
+		strings.Contains(res, "Sample-Page:test") &&
+		strings.Contains(res, "Sample-Block:via_block") {
+		t.Log("ok")
+	} else {
+		t.Error(res)
+		t.Error("Didn't just render samp")
+	}
+}
+
+func Test_RenderBlockAsHTMLString(t *testing.T) {
+
+	// OK call
+	res, err := tmpls.RenderBlockAsHTMLString("_sample_block", "test")
+	if err != nil {
+		t.Error(err)
+	}
+	resStr := string(res)
+	if !strings.Contains(resStr, "Sample-Block:test") || strings.Contains(resStr, "should-be-hidden") {
+		t.Error("err:", err)
+		t.Error("res:", res)
+		t.Error("Didn't contain", "Layout-Full:test")
+	}
+
+	// NOT ok calls
+	res, err = tmpls.RenderBlockAsHTMLString("without_prepending_underscore", "test")
+	if err == nil || !strings.Contains(err.Error(), "blockname needs to start with") {
+		t.Error(err, "res: ", res)
+	}
+
+	res, err = tmpls.RenderBlockAsHTMLString("_not_existing", "test")
+	if err == nil || !strings.Contains(err.Error(), "template _not_existing not found") {
+		t.Error(err, "res: ", res)
+	}
+}
+
+func Test_block_via_ExecuteTemplate(t *testing.T) {
+
+	res, err := tmpls.ExecuteTemplateAsText(nil, "_sample_block", "test")
+	if err != nil {
+		t.Error(err)
+	}
+	resStr := string(res)
+	if !strings.Contains(resStr, "Sample-Block:test") ||
+		strings.Contains(resStr, "should-be-hidden") ||
+		strings.Contains(resStr, "Page") ||
+		strings.Contains(resStr, "Layout") {
+		t.Error("err:", err)
+		t.Error("res:", res)
+		t.Error("Didn't contain", "Layout-Full:test")
+	}
+}
+
+func Test_Templates_NotFound(t *testing.T) {
+
+	res, err := tmpls.ExecuteTemplateAsText(nil, "_not_found", "test")
+	if err == nil || !strings.Contains(err.Error(), "template: name not found") {
+		t.Error(err, "res: ", res)
+	}
+
+	res, err = tmpls.ExecuteTemplateAsText(nil, ":not_found", "test")
+	if err == nil || !strings.Contains(err.Error(), "template: name not found") {
+		t.Error(err, "res: ", res)
+	}
+
+	res, err = tmpls.ExecuteTemplateAsText(nil, "not_found", "test")
+	if err == nil || !strings.Contains(err.Error(), "template: name not found") {
+		t.Error(err, "res: ", res)
+	}
+
+	res, err = tmpls.ExecuteTemplateAsText(nil, "not_found:sample_page", "test")
+	if err == nil || !strings.Contains(err.Error(), "template: name not found") {
+		t.Error(err, "res: ", res)
+	}
+
+}
