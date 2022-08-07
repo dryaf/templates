@@ -64,6 +64,13 @@ func (ht *Handlers) Todos(c echo.Context) error {
 
 ```
 
+# Locals can be passed to blocks
+
+```html
+{{block "_sample_block_with_locals" locals "a" 1 "b" 2 "c" 3  }}{{end}}
+{{locals "a" "x" "b" "y" "c" "z" | d_block "_sample_block_with_locals"   }}
+```
+
 ## Todos
 
 [ ] implement sse for hotwired turbo

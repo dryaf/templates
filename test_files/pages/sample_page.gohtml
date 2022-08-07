@@ -2,6 +2,8 @@ should-be-hidden
 {{define "page"}}Sample-Page:{{.}}
 
 {{block "_sample_block" "via_block"}}{{end}}
+{{block "_sample_block_with_locals" locals "a" 1 "b" 2 "c" 3  }}{{end}}
 {{d_block "_sample_block" "via_d_block"}}
+{{locals "a" "x" "b" "y" "c" "z" | d_block "_sample_block_with_locals"   }}
 
 {{end}}

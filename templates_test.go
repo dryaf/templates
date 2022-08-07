@@ -30,6 +30,8 @@ func Test_DefaultLayout(t *testing.T) {
 	if strings.Contains(res, "Special-Layout:test") ||
 		!strings.Contains(res, "Sample-Page:test") ||
 		!strings.Contains(res, "Sample-Block:via_block") ||
+		!strings.Contains(res, "Sample-Block-Locals:1 2 3") ||
+		!strings.Contains(res, "Sample-Block-Locals:x y z") ||
 		!strings.Contains(res, "Sample-Block:via_d_block") {
 		t.Error(res)
 		t.Error("test railed, maybe layout was rendered ")
@@ -126,4 +128,17 @@ func Test_Templates_NotFound(t *testing.T) {
 		t.Error(err, "res: ", res)
 	}
 
+}
+
+func Test_Locals(t *testing.T) {
+	a := testable.Locals("a", "a1", "b", 2, "c", 23.23)
+	if a["a"] != "a1" {
+		t.Error(a)
+	}
+	if a["b"] != 2 {
+		t.Error(a)
+	}
+	if a["c"] != 23.23 {
+		t.Error(a)
+	}
 }

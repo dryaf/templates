@@ -53,6 +53,7 @@ func (t *Templates) AddFuncMapHelpers() {
 	if t.cfg.AddHeadlessCMSFuncMapHelpers {
 		t.AddDynamicBlockToFuncMap()
 		t.AddTrustHTMLToFuncMap()
+		t.AddLocalsToFuncMap()
 	}
 }
 
@@ -220,11 +221,12 @@ func (t *Templates) AddTrustHTMLToFuncMap() {
 	t.funcMap["trust_html"] = trust_html
 }
 
-func trust_html(html any) template.HTML {
-	if html == nil {
-		return template.HTML("")
+func (t *Templates) AddLocalsToFuncMap() {
+	_, ok := t.funcMap["locals"]
+	if ok {
+		log.Fatal("locals is already in use")
 	}
-	return template.HTML(fmt.Sprint(html))
+	t.funcMap["locals"] = Locals
 }
 
 // HandlerRenderWithData returns a Handler function which only renders the template
@@ -266,4 +268,24 @@ func (t *Templates) ExecuteTemplateAsText(r *http.Request, templateName string, 
 		return "", err
 	}
 	return string(template.HTML(b.String())), nil
+}
+
+func trust_html(html any) template.HTML {
+	if html == nil {
+		return template.HTML("")
+	}
+	return template.HTML(fmt.Sprint(html))
+}
+
+func Locals(args ...any) map[string]any {
+	m := map[string]any{}
+	var key any
+	for i, arg := range args {
+		if i%2 == 0 {
+			key = arg
+		} else {
+			m[fmt.Sprint(key)] = arg
+		}
+	}
+	return m
 }
