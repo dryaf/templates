@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -120,6 +121,10 @@ func (t *Templates) ParseTemplates() error {
 		newTemplate, err := parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystem, snippetFilePath)
 		if err != nil {
 			return errors.Wrap(err, snippetFilePath)
+		}
+		definedTemplate := regexp.MustCompile(`^; defined templates are: |"|, `).ReplaceAllString(newTemplate.DefinedTemplates(), "")
+		if _, exists := t.templates[definedTemplate]; exists || (snippetName != definedTemplate) {
+			log.Fatal("fatal error - blockfile: '", snippetFilename, "' block-definition-in-file: '", definedTemplate, "' error reason 1: block already defined as key or reason 2: the filename doesnt match the blockname within")
 		}
 		t.templates[snippetName] = newTemplate // sample '_grid'
 	}

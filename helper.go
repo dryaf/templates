@@ -2,7 +2,7 @@ package templates
 
 import (
 	"html/template"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"path"
@@ -49,7 +49,7 @@ func parseNewTemplateWithFuncMap(layout string, fnMap template.FuncMap, fs http.
 		if err != nil {
 			return nil, errors.Wrap(err, filename)
 		}
-		b, err := ioutil.ReadAll(file)
+		b, err := io.ReadAll(file)
 		if err != nil {
 			return nil, err
 		}
