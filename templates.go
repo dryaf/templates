@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"log"
+
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/pkg/errors"
+	"golang.org/x/exp/slog"
 )
 
 type Templates struct {
@@ -33,7 +33,7 @@ func New(fileSystem http.FileSystem, templatesPathInFileSystem string, fnMap tem
 
 	if fileSystem == nil {
 		fileSystem = http.FS(os.DirFS("."))
-		log.Default().Println("Using local filesystem '.' to parse templates in directory " + templatesPathInFileSystem)
+		slog.Info("Using local filesystem '.' to parse templates in directory " + templatesPathInFileSystem)
 	}
 
 	t := &Templates{
@@ -122,13 +122,26 @@ func (t *Templates) ParseTemplates() error {
 		if err != nil {
 			return errors.Wrap(err, snippetFilePath)
 		}
-		definedTemplate := regexp.MustCompile(`^; defined templates are: |"|, `).ReplaceAllString(newTemplate.DefinedTemplates(), "")
-		if _, exists := t.templates[definedTemplate]; exists || (snippetName != definedTemplate) {
-			log.Fatal("fatal error - blockfile: '", snippetFilename, "' block-definition-in-file: '", definedTemplate, "' error reason 1: block already defined as key or reason 2: the filename doesnt match the blockname within")
+
+		if _, exists := t.templates[snippetName]; exists || !definedTemplatesContain(newTemplate, snippetName) {
+			slog.Error("fatal", errors.New("error reason 1: block already defined as key or reason 2: the filename doesnt match a definition within the file"), "block_filename", snippetFilename, "defined_name", snippetName)
+			os.Exit(1)
 		}
 		t.templates[snippetName] = newTemplate // sample '_grid'
 	}
 	return nil
+}
+
+func definedTemplatesContain(t *template.Template, name string) bool {
+	for _, tmpl := range t.Templates() {
+		if tmpl.Tree == nil || tmpl.Tree.Root.Pos == 0 {
+			continue
+		}
+		if tmpl.Tree.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // ExecuteTemplate renders the template specified by name (layout:page or just page)
@@ -213,7 +226,8 @@ func (t *Templates) RenderBlockAsHTMLString(blockname string, payload interface{
 func (t *Templates) AddDynamicBlockToFuncMap() {
 	_, ok := t.funcMap["d_block"]
 	if ok {
-		log.Fatal("d_block is already in use")
+		slog.Error("func_map", errors.New("d_block is already in use"))
+		os.Exit(1)
 	}
 	t.funcMap["d_block"] = t.RenderBlockAsHTMLString
 }
@@ -221,7 +235,8 @@ func (t *Templates) AddDynamicBlockToFuncMap() {
 func (t *Templates) AddTrustHTMLToFuncMap() {
 	_, ok := t.funcMap["trust_html"]
 	if ok {
-		log.Fatal("trust_html is already in use")
+		slog.Error("func_map", errors.New("trust_html is already in use"))
+		os.Exit(1)
 	}
 	t.funcMap["trust_html"] = trust_html
 }
@@ -229,7 +244,8 @@ func (t *Templates) AddTrustHTMLToFuncMap() {
 func (t *Templates) AddLocalsToFuncMap() {
 	_, ok := t.funcMap["locals"]
 	if ok {
-		log.Fatal("locals is already in use")
+		slog.Error("locals", errors.New("locals is already in use"))
+		os.Exit(1)
 	}
 	t.funcMap["locals"] = Locals
 }
@@ -239,7 +255,7 @@ func (t *Templates) HandlerRenderWithData(templateName string, data interface{})
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := t.ExecuteTemplate(w, r, templateName, data)
 		if err != nil {
-			log.Println(err)
+			slog.Error("template", err)
 		}
 	}
 }
@@ -249,7 +265,7 @@ func (t *Templates) HandlerRenderWithDataFromContext(templateName string, contex
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := t.ExecuteTemplate(w, r, templateName, r.Context().Value(contextKey))
 		if err != nil {
-			log.Println(err)
+			slog.Error("template", err)
 		}
 	}
 }

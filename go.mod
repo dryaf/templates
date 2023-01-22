@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/labstack/echo/v4 v4.10.0
 	github.com/pkg/errors v0.9.1
+	golang.org/x/exp v0.0.0-20230118134722-a68e582fa157
 )
 
 require (

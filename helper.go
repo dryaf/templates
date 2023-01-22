@@ -3,18 +3,20 @@ package templates
 import (
 	"html/template"
 	"io"
-	"log"
 	"net/http"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
 
 	"github.com/pkg/errors"
+	"golang.org/x/exp/slog"
 )
 
 func fatalOnErr(err error) {
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("fatal", err)
+		os.Exit(1)
 	}
 }
 

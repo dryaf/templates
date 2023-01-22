@@ -1,0 +1,8 @@
+should-be-hidden
+{{define "page"}}
+Level Nested:{{.}}<br>
+   {{ block "_block" .}}{{end}}
+   {{ block "_block" . }}{{end}}
+   {{ block "_sample_block" .}}{{end}}
+{{end}}
+should-be-hidden

@@ -106,6 +106,24 @@ func Test_block_via_ExecuteTemplate(t *testing.T) {
 	}
 }
 
+func Test_block_in_block_ExecuteTemplate(t *testing.T) {
+
+	res, err := tmpls.ExecuteTemplateAsText(nil, "nested", "test")
+	if err != nil {
+		t.Error(err)
+	}
+	resStr := string(res)
+	if strings.Count(resStr, "should-be-hidden") != 0 ||
+		strings.Count(resStr, "Layout-Full:test") != 1 ||
+		strings.Count(resStr, "Level Nested:test") != 1 ||
+		strings.Count(resStr, "BB:test") != 2 ||
+		strings.Count(resStr, "Sample-Block:test") != 3 {
+		t.Error("err:", err)
+		t.Error("resStr:", resStr)
+		t.Error("Didn't contain ...")
+	}
+}
+
 func Test_Templates_NotFound(t *testing.T) {
 
 	res, err := tmpls.ExecuteTemplateAsText(nil, "_not_found", "test")
