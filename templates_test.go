@@ -7,6 +7,11 @@ import (
 	"testing"
 )
 
+type Person struct {
+	Name string
+	Age  int64
+}
+
 //go:embed files/templates
 var embededTemplates embed.FS
 
@@ -33,6 +38,19 @@ func TestMain(m *testing.M) {
 func failOnErr(t *testing.T, err error) {
 	if err != nil {
 		t.Error(err)
+	}
+}
+
+func Test_DefaultLayoutWithPerson(t *testing.T) {
+	res, err := tmpls.ExecuteTemplateAsText(nil, "person", &Person{Name: "Bob", Age: 39})
+	failOnErr(t, err)
+
+	if !strings.Contains(res, "Layout") ||
+		!strings.Contains(res, "Person-Page") ||
+		!strings.Contains(res, "Name: Bob") ||
+		!strings.Contains(res, "Age: 39") {
+		t.Error(res)
+		t.Error("test railed, maybe layout was rendered ")
 	}
 }
 
