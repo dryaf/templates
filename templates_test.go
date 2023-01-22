@@ -1,20 +1,33 @@
-package templates_test
+package templates
 
 import (
+	"embed"
 	"os"
 	"strings"
 	"testing"
-
-	testable "github.com/dryaf/templates"
 )
 
-var tmpls *testable.Templates
+//go:embed files/templates
+var embededTemplates embed.FS
+
+var tmpls *Templates
 
 func TestMain(m *testing.M) {
-	tmpls = testable.New(nil, "./test_files", nil)
+	var code int = 0
+
+	// test with locals files
+	tmpls = New(nil, nil)
 	tmpls.MustParseTemplates()
-	exitVal := m.Run()
-	os.Exit(exitVal)
+	code = m.Run()
+	if code != 0 {
+		os.Exit(code)
+	}
+
+	//test with embedded files
+	tmpls = New(&embededTemplates, nil)
+	tmpls.MustParseTemplates()
+	code = m.Run()
+	os.Exit(code)
 }
 
 func failOnErr(t *testing.T, err error) {
@@ -78,13 +91,13 @@ func Test_RenderBlockAsHTMLString(t *testing.T) {
 	}
 
 	// NOT ok calls
-	res, err = tmpls.RenderBlockAsHTMLString("without_prepending_underscore", "test")
-	if err == nil || !strings.Contains(err.Error(), "blockname needs to start with") {
+	res, err = tmpls.RenderBlockAsHTMLString("not_starting_with_underscore", "test")
+	if err == nil || !strings.Contains(err.Error(), "blockname needs to start with _") {
 		t.Error(err, "res: ", res)
 	}
 
-	res, err = tmpls.RenderBlockAsHTMLString("_not_existing", "test")
-	if err == nil || !strings.Contains(err.Error(), "template _not_existing not found") {
+	res, err = tmpls.RenderBlockAsHTMLString("_", "test")
+	if err == nil || !strings.Contains(err.Error(), "not found in templates-map") {
 		t.Error(err, "res: ", res)
 	}
 }
@@ -149,7 +162,7 @@ func Test_Templates_NotFound(t *testing.T) {
 }
 
 func Test_Locals(t *testing.T) {
-	a := testable.Locals("a", "a1", "b", 2, "c", 23.23)
+	a := Locals("a", "a1", "b", 2, "c", 23.23)
 	if a["a"] != "a1" {
 		t.Error(a)
 	}

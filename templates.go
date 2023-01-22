@@ -2,9 +2,12 @@ package templates
 
 import (
 	"bytes"
+	"embed"
 	"fmt"
-	"html/template"
 	"io"
+	"io/fs"
+
+	"github.com/google/safehtml/template"
 
 	"net/http"
 	"os"
@@ -17,29 +20,64 @@ import (
 	"golang.org/x/exp/slog"
 )
 
+const templatesPath = "files/templates"
+const layoutsPath = "layouts"
+const pagesPath = "pages"
+const blocksPath = "blocks"
+const fileExtension = ".gohtml"
+
 type Templates struct {
 	AlwaysReloadAndParseTemplates bool
 
-	cfg *TemplatesConfig
+	DefaultLayout         string
+	TemplateFileExtension string
 
-	funcMap    template.FuncMap
-	fileSystem http.FileSystem
+	TemplatesPath template.TrustedSource
+	LayoutsPath   string
+	PagesPath     string
+	BlocksPath    string
+
+	AddHeadlessCMSFuncMapHelpers bool
+
+	funcMap template.FuncMap
+
+	fileSystem        fs.FS
+	fileSystemTrusted template.TrustedFS
+	fileSystemIsEmbed bool
 
 	templates map[string]*template.Template
 }
 
 // New return new Templates with default configs and templates functions to support headless cms
-func New(fileSystem http.FileSystem, templatesPathInFileSystem string, fnMap template.FuncMap) *Templates {
+func New(efs *embed.FS, fnMap template.FuncMap) *Templates {
 
-	if fileSystem == nil {
-		fileSystem = http.FS(os.DirFS("."))
-		slog.Info("Using local filesystem '.' to parse templates in directory " + templatesPathInFileSystem)
+	var trustedFileSystem template.TrustedFS
+	var fileSystem fs.FS
+	if efs != nil {
+		fsys, err := fs.Sub(*efs, "files/templates")
+		if err != nil {
+			panic(err)
+		}
+		fileSystem = fsys
+		trustedFileSystem = template.TrustedFSFromEmbed(*efs)
+	} else {
+		fileSystem = os.DirFS(templatesPath)
+		trustedFileSystem = template.TrustedFSFromTrustedSource(template.TrustedSourceFromConstant(templatesPath))
 	}
 
 	t := &Templates{
-		cfg:        DefaultTemplatesConfig(templatesPathInFileSystem),
-		funcMap:    fnMap,
-		fileSystem: fileSystem,
+		DefaultLayout:         "application",
+		TemplateFileExtension: ".gohtml",
+		LayoutsPath:           layoutsPath,
+		PagesPath:             pagesPath,
+		BlocksPath:            blocksPath,
+
+		AddHeadlessCMSFuncMapHelpers: true, // d_block, trust_html
+		funcMap:                      fnMap,
+
+		fileSystem:        fileSystem,
+		fileSystemTrusted: trustedFileSystem,
+		fileSystemIsEmbed: efs != nil,
 	}
 
 	t.AddFuncMapHelpers()
@@ -51,17 +89,11 @@ func (t *Templates) AddFuncMapHelpers() {
 	if t.funcMap == nil {
 		t.funcMap = template.FuncMap{}
 	}
-	if t.cfg.AddHeadlessCMSFuncMapHelpers {
+	if t.AddHeadlessCMSFuncMapHelpers {
 		t.AddDynamicBlockToFuncMap()
-		t.AddTrustHTMLToFuncMap()
+		// t.AddTrustHTMLToFuncMap()
 		t.AddLocalsToFuncMap()
 	}
-}
-
-func (t *Templates) OverrideDefaultTemplateConfig(cfg *TemplatesConfig) {
-	t.cfg = cfg
-	t.AddFuncMapHelpers()
-	fatalOnErr(t.ParseTemplates())
 }
 
 // MustParseTemplates goes fatal if there is an error
@@ -72,16 +104,17 @@ func (t *Templates) MustParseTemplates() {
 // ParseTemplates reads all html files and freshly compiles the templates
 func (t *Templates) ParseTemplates() error {
 	t.templates = make(map[string]*template.Template)
-	layouts, err := getFilePathsInDir(t.fileSystem, t.cfg.LayoutsPath, t.cfg.TemplateFileExtension, false)
+	hfs := http.FS(t.fileSystem)
+	layouts, err := getFilePathsInDir(hfs, t.LayoutsPath, t.fileSystemIsEmbed)
 	if err != nil {
 		return errors.Wrap(err, "reading layout files")
 	}
 	numberOfLayouts := len(layouts)
-	pages, err := getFilePathsInDir(t.fileSystem, t.cfg.PagesPath, t.cfg.TemplateFileExtension, false)
+	pages, err := getFilePathsInDir(hfs, t.PagesPath, t.fileSystemIsEmbed)
 	if err != nil {
 		return errors.Wrap(err, "reading pages")
 	}
-	blocks, err := getFilePathsInDir(t.fileSystem, t.cfg.BlocksPath, t.cfg.TemplateFileExtension, true)
+	blocks, err := getFilePathsInDir(hfs, t.BlocksPath, t.fileSystemIsEmbed)
 	if err != nil {
 		return errors.Wrap(err, "reading shared blocks")
 	}
@@ -96,48 +129,54 @@ func (t *Templates) ParseTemplates() error {
 			layoutName := strings.TrimSuffix(layoutFilename, path.Ext(layoutFilename))
 			pageFilename := filepath.Base(pageFilePath)
 			pageName := strings.TrimSuffix(pageFilename, path.Ext(pageFilename))
-			newTemplate, err := parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystem, files...)
+			newTemplate, err := parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystemTrusted, files...)
 			if err != nil {
 				return errors.Wrap(err, pageName)
 			}
 			t.templates[layoutName+":"+pageName] = newTemplate // sample 'application:products' aka 'layout:pageName'
 		}
 	}
-	// Pages block "page"
+	// Page   "page" + blocks
 	for _, pageFilePath := range pages {
-		files := append(blocks, pageFilePath)
+		files := append(blocks, pageFilePath) // blocks and this one page file will end up in a template
 		pageFilename := filepath.Base(pageFilePath)
 		pageName := strings.TrimSuffix(pageFilename, path.Ext(pageFilename))
-		newTemplate, err := parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystem, files...)
+		newTemplate, err := parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystemTrusted, files...)
 		if err != nil {
 			return errors.Wrap(err, pageName)
 		}
 		t.templates[":"+pageName] = newTemplate // sample ':products'
 	}
 	// Blocks with prefix '_'
-	for _, snippetFilePath := range blocks {
-		snippetFilename := filepath.Base(snippetFilePath)
-		snippetName := strings.TrimSuffix(snippetFilename, path.Ext(snippetFilename))
-		newTemplate, err := parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystem, snippetFilePath)
+	for _, blockFilePath := range blocks {
+		blockFilename := filepath.Base(blockFilePath)
+		blockName := strings.TrimSuffix(blockFilename, path.Ext(blockFilename))
+		newTemplate, err := parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystemTrusted, blockFilePath)
 		if err != nil {
-			return errors.Wrap(err, snippetFilePath)
+			return errors.Wrap(err, blockFilePath)
 		}
 
-		if _, exists := t.templates[snippetName]; exists || !definedTemplatesContain(newTemplate, snippetName) {
-			slog.Error("fatal", errors.New("error reason 1: block already defined as key or reason 2: the filename doesnt match a definition within the file"), "block_filename", snippetFilename, "defined_name", snippetName)
+		prefixedBlockName := blockName
+		if blockName[:1] != "_" {
+			prefixedBlockName = "_" + blockName
+		}
+
+		if _, exists := t.templates[prefixedBlockName]; exists || !definedTemplatesContain(newTemplate, prefixedBlockName) {
+			slog.Error("templates_map", errors.New("error reason 1: block already defined as key or reason 2: the filename doesnt match a definition within the file"), "block_filename", blockFilename, "defined_name", blockName)
 			os.Exit(1)
 		}
-		t.templates[snippetName] = newTemplate // sample '_grid'
+		t.templates[prefixedBlockName] = newTemplate // sample '_grid'
 	}
 	return nil
 }
 
 func definedTemplatesContain(t *template.Template, name string) bool {
-	for _, tmpl := range t.Templates() {
+	templates := t.Templates()
+	for _, tmpl := range templates {
 		if tmpl.Tree == nil || tmpl.Tree.Root.Pos == 0 {
 			continue
 		}
-		if tmpl.Tree.Name == name {
+		if tmpl.Name() == name {
 			return true
 		}
 	}
@@ -180,7 +219,7 @@ func (t *Templates) ExecuteTemplate(w io.Writer, r *http.Request, templateName s
 		if !ok {
 			return errors.New("template: name not found ->" + templateName)
 		}
-		return tmpl.ExecuteTemplate(w, "", data)
+		return tmpl.ExecuteTemplate(w, "layout", data)
 	}
 
 	// with layout [from request-context or default from config]
@@ -193,18 +232,18 @@ func (t *Templates) ExecuteTemplate(w io.Writer, r *http.Request, templateName s
 		}
 	}
 	if !layoutIsSetInContext {
-		templateName = fmt.Sprint(t.cfg.DefaultLayout, ":", templateName)
+		templateName = fmt.Sprint(t.DefaultLayout, ":", templateName)
 	}
 
 	tmpl, ok := t.templates[templateName]
 	if !ok {
 		return errors.New("template: name not found ->" + templateName)
 	}
-	return tmpl.ExecuteTemplate(w, "", data)
+	return tmpl.ExecuteTemplate(w, "layout", data)
 }
 
 // RenderBlockAsHTMLString renders a template from the templates-map as a HTML-String
-func (t *Templates) RenderBlockAsHTMLString(blockname string, payload interface{}) (template.HTML, error) {
+func (t *Templates) RenderBlockAsHTMLString(blockname string, payload interface{}) (string, error) {
 	if blockname[:1] != "_" {
 		return "", errors.New("blockname needs to start with _")
 	}
@@ -217,7 +256,8 @@ func (t *Templates) RenderBlockAsHTMLString(blockname string, payload interface{
 		return "", errors.New("template " + blockname + " not found in templates-map")
 	}
 	err := tt.ExecuteTemplate(&b, blockname, payload)
-	return template.HTML(b.String()), err
+
+	return b.String(), err
 }
 
 // AddDynamicBlockToFuncMap adds 'd_block' to the FuncMap which allows to render blocks from variables dynamically set
@@ -232,14 +272,14 @@ func (t *Templates) AddDynamicBlockToFuncMap() {
 	t.funcMap["d_block"] = t.RenderBlockAsHTMLString
 }
 
-func (t *Templates) AddTrustHTMLToFuncMap() {
-	_, ok := t.funcMap["trust_html"]
-	if ok {
-		slog.Error("func_map", errors.New("trust_html is already in use"))
-		os.Exit(1)
-	}
-	t.funcMap["trust_html"] = trust_html
-}
+// func (t *Templates) AddTrustHTMLToFuncMap() {
+// 	_, ok := t.funcMap["trust_html"]
+// 	if ok {
+// 		slog.Error("func_map", errors.New("trust_html is already in use"))
+// 		os.Exit(1)
+// 	}
+// 	t.funcMap["trust_html"] = trust_html
+// }
 
 func (t *Templates) AddLocalsToFuncMap() {
 	_, ok := t.funcMap["locals"]
@@ -288,15 +328,15 @@ func (t *Templates) ExecuteTemplateAsText(r *http.Request, templateName string, 
 	if err != nil {
 		return "", err
 	}
-	return string(template.HTML(b.String())), nil
+	return b.String(), nil
 }
 
-func trust_html(html any) template.HTML {
-	if html == nil {
-		return template.HTML("")
-	}
-	return template.HTML(fmt.Sprint(html))
-}
+// func trust_html(html any) template.HTML {
+// 	if html == nil {
+// 		return template.HTML("")
+// 	}
+// 	return template.HTML(fmt.Sprint(html))
+// }
 
 func Locals(args ...any) map[string]any {
 	m := map[string]any{}
