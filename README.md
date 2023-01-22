@@ -73,6 +73,7 @@ func (ht *Handlers) Todos(c echo.Context) error {
 
 ## Todos till v0.1.0
 [x] use safehtml instead of std lib
+[ ] move echo_wrappers to seperate package
 [ ] code cleanup
 [ ] implement sse for hotwired turbo
 [ ] add tests for hotwired turbo
