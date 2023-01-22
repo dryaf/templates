@@ -24,9 +24,9 @@
             - todos_index.gohtml
             - todos_edit.gohtml
             - ...
-        - blocks **(must start with _ , must contain define '_form', '_message' ...)**
-            - _form.gohtml
-            - _message.gohtml
+        - blocks **(definition within file must start with _ and must contain definition '_form')**
+            - form.gohtml
+            - message.gohtml
 
 
 ### 2. Initialize:
@@ -71,8 +71,8 @@ func (ht *Handlers) Todos(c echo.Context) error {
 {{locals "a" "x" "b" "y" "c" "z" | d_block "_sample_block_with_locals"   }}
 ```
 
-## Todos
-
+## Todos till v0.1.0
+[x] use safehtml instead of std lib
+[ ] code cleanup
 [ ] implement sse for hotwired turbo
-
 [ ] add tests for hotwired turbo
