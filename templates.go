@@ -3,12 +3,10 @@ package templates
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
-
-	"github.com/google/safehtml/template"
-
 	"net/http"
 	"os"
 	"path"
@@ -16,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/google/safehtml/template"
 	"golang.org/x/exp/slog"
 )
 
@@ -54,7 +52,7 @@ func New(efs *embed.FS, fnMap template.FuncMap) *Templates {
 	var trustedFileSystem template.TrustedFS
 	var fileSystem fs.FS
 	if efs != nil {
-		fsys, err := fs.Sub(*efs, "files/templates")
+		fsys, err := fs.Sub(*efs, templatesPath)
 		if err != nil {
 			panic(err)
 		}
@@ -107,16 +105,16 @@ func (t *Templates) ParseTemplates() error {
 	hfs := http.FS(t.fileSystem)
 	layouts, err := getFilePathsInDir(hfs, t.LayoutsPath, t.fileSystemIsEmbed)
 	if err != nil {
-		return errors.Wrap(err, "reading layout files")
+		return fmt.Errorf("reading layout files: %w", err)
 	}
 	numberOfLayouts := len(layouts)
 	pages, err := getFilePathsInDir(hfs, t.PagesPath, t.fileSystemIsEmbed)
 	if err != nil {
-		return errors.Wrap(err, "reading pages")
+		return fmt.Errorf("reading pages: %w", err)
 	}
 	blocks, err := getFilePathsInDir(hfs, t.BlocksPath, t.fileSystemIsEmbed)
 	if err != nil {
-		return errors.Wrap(err, "reading shared blocks")
+		return fmt.Errorf("reading shared blocks: %w", err)
 	}
 	if numberOfLayouts == 0 {
 		return errors.New("you need at least one layout")
@@ -131,7 +129,7 @@ func (t *Templates) ParseTemplates() error {
 			pageName := strings.TrimSuffix(pageFilename, path.Ext(pageFilename))
 			newTemplate, err := parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystemTrusted, files...)
 			if err != nil {
-				return errors.Wrap(err, pageName)
+				return fmt.Errorf("%s: %w", pageName, err)
 			}
 			t.templates[layoutName+":"+pageName] = newTemplate // sample 'application:products' aka 'layout:pageName'
 		}
@@ -143,7 +141,7 @@ func (t *Templates) ParseTemplates() error {
 		pageName := strings.TrimSuffix(pageFilename, path.Ext(pageFilename))
 		newTemplate, err := parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystemTrusted, files...)
 		if err != nil {
-			return errors.Wrap(err, pageName)
+			return fmt.Errorf("%s: %w", pageName, err)
 		}
 		t.templates[":"+pageName] = newTemplate // sample ':products'
 	}
@@ -153,7 +151,7 @@ func (t *Templates) ParseTemplates() error {
 		blockName := strings.TrimSuffix(blockFilename, path.Ext(blockFilename))
 		newTemplate, err := parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystemTrusted, blockFilePath)
 		if err != nil {
-			return errors.Wrap(err, blockFilePath)
+			return fmt.Errorf("%s: %w", blockFilePath, err)
 		}
 
 		prefixedBlockName := blockName

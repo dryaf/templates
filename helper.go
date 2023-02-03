@@ -1,6 +1,8 @@
 package templates
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path"
@@ -8,8 +10,6 @@ import (
 	"strings"
 
 	"github.com/google/safehtml/template"
-
-	"github.com/pkg/errors"
 	"golang.org/x/exp/slog"
 )
 
@@ -25,11 +25,12 @@ func getFilePathsInDir(fs http.FileSystem, dirPath string, prefixTemplatesPath b
 	dirPath = cleanPath(dirPath)
 	dir, err := fs.Open(dirPath)
 	if err != nil {
-		return nil, errors.Wrap(err, "getFilePathsInDir fs.Open")
+		return nil, fmt.Errorf("getFilePathsInDir fs.Open: %w", err)
+
 	}
 	fileInfos, err := dir.Readdir(-1)
 	if err != nil {
-		return nil, errors.Wrap(err, "getFilePathsInDir Readdir")
+		return nil, fmt.Errorf("getFilePathsInDir Readdir: %w", err)
 	}
 	files := []string{}
 	for _, fileInfo := range fileInfos {
