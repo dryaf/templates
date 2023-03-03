@@ -14,7 +14,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/google/safehtml"
 	"github.com/google/safehtml/template"
+	"github.com/google/safehtml/uncheckedconversions"
 	"golang.org/x/exp/slog"
 )
 
@@ -89,7 +91,7 @@ func (t *Templates) AddFuncMapHelpers() {
 	}
 	if t.AddHeadlessCMSFuncMapHelpers {
 		t.AddDynamicBlockToFuncMap()
-		// t.AddTrustHTMLToFuncMap()
+		t.AddTrustedHTMLToFuncMap()
 		t.AddLocalsToFuncMap()
 	}
 }
@@ -270,14 +272,14 @@ func (t *Templates) AddDynamicBlockToFuncMap() {
 	t.funcMap["d_block"] = t.RenderBlockAsHTMLString
 }
 
-// func (t *Templates) AddTrustHTMLToFuncMap() {
-// 	_, ok := t.funcMap["trust_html"]
-// 	if ok {
-// 		slog.Error("func_map", errors.New("trust_html is already in use"))
-// 		os.Exit(1)
-// 	}
-// 	t.funcMap["trust_html"] = trust_html
-// }
+func (t *Templates) AddTrustedHTMLToFuncMap() {
+	_, ok := t.funcMap["trusted_html"]
+	if ok {
+		slog.Error("func_map", errors.New("trusted_html is already in use"))
+		os.Exit(1)
+	}
+	t.funcMap["trusted_html"] = trustedHTML
+}
 
 func (t *Templates) AddLocalsToFuncMap() {
 	_, ok := t.funcMap["locals"]
@@ -329,12 +331,12 @@ func (t *Templates) ExecuteTemplateAsText(r *http.Request, templateName string, 
 	return b.String(), nil
 }
 
-// func trust_html(html any) template.HTML {
-// 	if html == nil {
-// 		return template.HTML("")
-// 	}
-// 	return template.HTML(fmt.Sprint(html))
-// }
+func trustedHTML(html any) safehtml.HTML {
+	if html == nil {
+		return uncheckedconversions.HTMLFromStringKnownToSatisfyTypeContract("")
+	}
+	return uncheckedconversions.HTMLFromStringKnownToSatisfyTypeContract(fmt.Sprint(html))
+}
 
 func Locals(args ...any) map[string]any {
 	m := map[string]any{}

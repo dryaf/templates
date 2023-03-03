@@ -69,6 +69,16 @@ func Test_DefaultLayout(t *testing.T) {
 	}
 }
 
+func Test_TrustedHTML(t *testing.T) {
+	res, err := tmpls.ExecuteTemplateAsText(nil, "trusted_html", "<b>test</b>")
+	failOnErr(t, err)
+
+	if !strings.Contains(res, "<b>test</b>") {
+		t.Error(res)
+		t.Error("test railed, maybe layout was rendered ")
+	}
+}
+
 func Test_Layout(t *testing.T) {
 	res, err := tmpls.ExecuteTemplateAsText(nil, "special:sample_page", "test")
 	failOnErr(t, err)
