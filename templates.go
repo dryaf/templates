@@ -243,21 +243,21 @@ func (t *Templates) ExecuteTemplate(w io.Writer, r *http.Request, templateName s
 }
 
 // RenderBlockAsHTMLString renders a template from the templates-map as a HTML-String
-func (t *Templates) RenderBlockAsHTMLString(blockname string, payload interface{}) (string, error) {
+func (t *Templates) RenderBlockAsHTMLString(blockname string, payload interface{}) (safehtml.HTML, error) {
 	if blockname[:1] != "_" {
-		return "", errors.New("blockname needs to start with _")
+		return safehtml.HTML{}, errors.New("blockname needs to start with _")
 	}
 	if len(blockname) > 255 {
-		return "", errors.New("number of characters in string must not exceed 255")
+		return safehtml.HTML{}, errors.New("number of characters in string must not exceed 255")
 	}
 	b := bytes.Buffer{}
 	tt, ok := t.templates[blockname]
 	if !ok {
-		return "", errors.New("template " + blockname + " not found in templates-map")
+		return safehtml.HTML{}, errors.New("template " + blockname + " not found in templates-map")
 	}
 	err := tt.ExecuteTemplate(&b, blockname, payload)
 
-	return b.String(), err
+	return uncheckedconversions.HTMLFromStringKnownToSatisfyTypeContract(b.String()), err
 }
 
 // AddDynamicBlockToFuncMap adds 'd_block' to the FuncMap which allows to render blocks from variables dynamically set

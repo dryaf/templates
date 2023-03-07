@@ -111,7 +111,7 @@ func Test_RenderBlockAsHTMLString(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	resStr := string(res)
+	resStr := res.String()
 	if !strings.Contains(resStr, "Sample-Block:test") || strings.Contains(resStr, "should-be-hidden") {
 		t.Error("err:", err)
 		t.Error("res:", res)
