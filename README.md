@@ -31,19 +31,25 @@
 
 ### 2. Initialize:
 ```go
+
+    import echo_integration "github.com/templates/integrations/echo"
+
+    ...
+
+
 	// (embeded) public files and templates
 	fileSystem := getFileSystem("files", in_dev_mode)
 	templates := templates.New(fileSystem, "./templates", nil)
 	templates.AlwaysReloadAndParseTemplates = in_dev_mode
 	templates.MustParseTemplates()
 
-	// router/webtoolkit + middleware
+	// sample echo
 	e := echo.New()
-	e.Pre(echo_wrappers.MethodOverrideFormField("_method"))
-	e.Use(echo_wrappers.CSRFTokenLookup("form:csrf"))
+	e.Pre(echo_integration.MethodOverrideFormField("_method"))
+	e.Use(echo_integration.CSRFTokenLookup("form:csrf"))
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
-	e.Renderer = echo_wrappers.Renderer(templates)
+	e.Renderer = echo_integration.Renderer(templates)
 ```
 
 ### 3. Use in handler
@@ -73,7 +79,7 @@ func (ht *Handlers) Todos(c echo.Context) error {
 
 ## Todos till v0.1.0
 [x] use safehtml instead of std lib
-[ ] move echo_wrappers to seperate package
+[x] move integrations_echo to seperate package
 [ ] code cleanup
 [ ] implement sse for hotwired turbo
 [ ] add tests for hotwired turbo

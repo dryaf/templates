@@ -1,4 +1,4 @@
-package echo_renderer
+package echo
 
 import (
 	"embed"
