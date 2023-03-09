@@ -1,4 +1,4 @@
-package echo_wrappers
+package echo_renderer
 
 import (
 	"embed"
