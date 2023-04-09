@@ -2,7 +2,9 @@ package templates
 
 import (
 	"embed"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -37,7 +39,7 @@ func TestMain(m *testing.M) {
 
 func failOnErr(t *testing.T, err error) {
 	if err != nil {
-		t.Error(err)
+		t.Fatalf("Error: %v", err)
 	}
 }
 
@@ -50,7 +52,7 @@ func Test_DefaultLayoutWithPerson(t *testing.T) {
 		!strings.Contains(res, "Name: Bob") ||
 		!strings.Contains(res, "Age: 39") {
 		t.Error(res)
-		t.Error("test railed, maybe layout was rendered ")
+		t.Error("test failed, maybe layout was rendered ")
 	}
 }
 
@@ -199,5 +201,30 @@ func Test_Locals(t *testing.T) {
 	}
 	if a["c"] != 23.23 {
 		t.Error(a)
+	}
+}
+
+func Test_MustParseTemplates_MissingLayouts(t *testing.T) {
+	// Setup a temporary directory for testing
+	tempDir, err := ioutil.TempDir("", "test-templates")
+	if err != nil {
+		t.Fatal("Failed to create temporary directory:", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create the required folder structure without the "layouts" folder
+	err = os.MkdirAll(filepath.Join(tempDir, "files", "templates"), 0755)
+	if err != nil {
+		t.Fatal("Failed to create folder structure:", err)
+	}
+
+	// Create a new Templates instance and set the localFS to the temporary directory
+	tmpls := New(nil, nil)
+	tmpls.fileSystem = os.DirFS(filepath.Join(tempDir, "files"))
+
+	// Call ParseTemplates and expect an error
+	err = tmpls.ParseTemplates()
+	if err == nil || !strings.Contains(err.Error(), "no such file or directory") {
+		t.Error("Expected an error for missing layouts folder, but got:", err)
 	}
 }

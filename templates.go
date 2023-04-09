@@ -60,7 +60,7 @@ func New(efs *embed.FS, fnMap template.FuncMap) *Templates {
 	if efs != nil {
 		fsys, err := fs.Sub(*efs, templatesPath)
 		if err != nil {
-			panic(err)
+			panic(fmt.Errorf("unable to create file system: %w", err))
 		}
 		fileSystem = fsys
 		trustedFileSystem = template.TrustedFSFromEmbed(*efs)

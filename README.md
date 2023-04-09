@@ -1,5 +1,10 @@
 # templates
 
+[![License](http://img.shields.io/badge/license-mit-blue.svg?style=flat-square)](https://raw.githubusercontent.com/dryaf/templates/master/LICENSE)
+[![Coverage](https://raw.githubusercontent.com/dryaf/templates/master/coverage.svg)](https://raw.githubusercontent.com/dryaf/templates/master/coverage.svg)
+[![Go Report Card](https://goreportcard.com/badge/github.com/dryaf/templates?style=flat-square)](https://goreportcard.com/report/github.com/dryaf/templates)
+[![GoDoc](https://godoc.org/github.com/dryaf/templates?status.svg)](https://godoc.org/github.com/dryaf/templates)
+
 ## What is it about?
 
 1. allows you to have layouts, pages, blocks (partials) 
