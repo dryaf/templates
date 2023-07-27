@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"embed"
 
@@ -49,7 +50,8 @@ type Templates struct {
 	fileSystemTrusted template.TrustedFS
 	fileSystemIsEmbed bool
 
-	templates map[string]*template.Template
+	templates     map[string]*template.Template
+	templatesLock sync.RWMutex
 }
 
 // New return new Templates with default configs and templates functions to support headless cms
@@ -190,9 +192,15 @@ func definedTemplatesContain(t *template.Template, name string) bool {
 func (t *Templates) ExecuteTemplate(w io.Writer, r *http.Request, templateName string, data interface{}) error {
 	// dev mode for example
 	if t.AlwaysReloadAndParseTemplates {
-		if err := t.ParseTemplates(); err != nil {
-			return err
+		if t.templatesLock.TryLock() {
+			err := t.ParseTemplates()
+			t.templatesLock.Unlock()
+			if err != nil {
+				return err
+			}
 		}
+		t.templatesLock.RLock()
+		defer t.templatesLock.RUnlock()
 	}
 
 	if templateName == "" {
