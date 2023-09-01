@@ -1,5 +1,8 @@
 .PHONY: coverage
 
+template-contents:
+	find ./files/templates -type f -exec echo "==> {} <==" \; -exec cat {} \; -exec echo \;
+
 coverage-svg:
 	@output=$$(go test ./...  -coverpkg=./... -coverprofile ./coverage.out 2>/dev/null && go tool cover -func ./coverage.out 2>/dev/null) && \
 	percentage=$$(echo "$$output" | grep 'total:' | awk '{print $$3}') && \

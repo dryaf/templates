@@ -16,10 +16,11 @@ import (
 
 	"embed"
 
+	"log/slog"
+
 	"github.com/google/safehtml"
 	"github.com/google/safehtml/template"
 	"github.com/google/safehtml/uncheckedconversions"
-	"golang.org/x/exp/slog"
 )
 
 // LayoutContextKey is the key for getting the layout string out of the context
