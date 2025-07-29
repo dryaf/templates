@@ -278,7 +278,7 @@ func (t *Templates) RenderBlockAsHTMLString(blockname string, payload interface{
 func (t *Templates) AddDynamicBlockToFuncMap() {
 	_, ok := t.funcMap["d_block"]
 	if ok {
-		slog.Error("func_map", errors.New("d_block is already in use"))
+		slog.Error("function name is already in use in FuncMap", "name", "d_block")
 		os.Exit(1)
 	}
 	t.funcMap["d_block"] = t.RenderBlockAsHTMLString
@@ -287,7 +287,7 @@ func (t *Templates) AddDynamicBlockToFuncMap() {
 func (t *Templates) AddTrustedHTMLToFuncMap() {
 	_, ok := t.funcMap["trusted_html"]
 	if ok {
-		slog.Error("func_map", errors.New("trusted_html is already in use"))
+		slog.Error("function name is already in use in FuncMap", "name", "trusted_html")
 		os.Exit(1)
 	}
 	t.funcMap["trusted_html"] = trustedHTML
@@ -296,7 +296,7 @@ func (t *Templates) AddTrustedHTMLToFuncMap() {
 func (t *Templates) AddLocalsToFuncMap() {
 	_, ok := t.funcMap["locals"]
 	if ok {
-		slog.Error("locals", errors.New("locals is already in use"))
+		slog.Error("function name is already in use in FuncMap", "name", "locals")
 		os.Exit(1)
 	}
 	t.funcMap["locals"] = Locals
@@ -307,7 +307,7 @@ func (t *Templates) HandlerRenderWithData(templateName string, data interface{})
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := t.ExecuteTemplate(w, r, templateName, data)
 		if err != nil {
-			slog.Error("template", err)
+			slog.Error("failed to execute template", "error", err, "template_name", templateName)
 		}
 	}
 }
@@ -317,7 +317,7 @@ func (t *Templates) HandlerRenderWithDataFromContext(templateName string, contex
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := t.ExecuteTemplate(w, r, templateName, r.Context().Value(contextKey))
 		if err != nil {
-			slog.Error("template", err)
+			slog.Error("failed to execute template", "error", err, "template_name", templateName)
 		}
 	}
 }
@@ -365,7 +365,7 @@ func Locals(args ...any) map[string]any {
 
 func fatalOnErr(err error) {
 	if err != nil {
-		slog.Error("fatal", err)
+		slog.Error("fatal error during setup", "error", err)
 		os.Exit(1)
 	}
 }
