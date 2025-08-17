@@ -1,3 +1,4 @@
+// ==== File: integrations/echo/echo.go ====
 package echo
 
 import (
@@ -28,9 +29,9 @@ func Renderer(t *templates.Templates) echo.Renderer {
 }
 
 func MethodOverrideFormField(fieldName string) echo.MiddlewareFunc {
-	return middleware.MethodOverrideWithConfig(middleware.MethodOverrideConfig{Getter: middleware.MethodFromForm("_method")})
+	return middleware.MethodOverrideWithConfig(middleware.MethodOverrideConfig{Getter: middleware.MethodFromForm(fieldName)})
 }
 
 func CSRFTokenLookup(lookupMethod string) echo.MiddlewareFunc {
-	return middleware.CSRFWithConfig(middleware.CSRFConfig{TokenLookup: "form:csrf"})
+	return middleware.CSRFWithConfig(middleware.CSRFConfig{TokenLookup: lookupMethod})
 }
