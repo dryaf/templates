@@ -7,6 +7,8 @@ github.com/dryaf/templates v0.0.8 h1:Z0nC6MDqtL+2sqNqXaC9drWcQ5YI3YySZ2a/clzA8Iw
 github.com/dryaf/templates v0.0.8/go.mod h1:c8PWOUwOs6Kt/4U94A5Hd+mrjqjoTmbGw/0E+X3QJ2k=
 github.com/dryaf/templates v0.1.0 h1:3XQanWY4nNIm4amQ4J3NE2J+gz89mSjh5r5yAaDewoU=
 github.com/dryaf/templates v0.1.0/go.mod h1:L8qQPhH+lpqaNJ2SAa84qadTQ+rdB3jKUE5E00LHanM=
+github.com/dryaf/templates v0.1.1 h1:FitRi3kO2VXEKzdO7fLWbjUkGoGoIJK6xFDGxlJHkwQ=
+github.com/dryaf/templates v0.1.1/go.mod h1:L8qQPhH+lpqaNJ2SAa84qadTQ+rdB3jKUE5E00LHanM=
 github.com/golang-jwt/jwt v3.2.2+incompatible h1:IfV12K8xAKAnZqdXVzCZ+TOjboZ2keLg81eXfW3O+oY=
 github.com/golang-jwt/jwt v3.2.2+incompatible/go.mod h1:8pz2t5EyA70fFQQSrl6XZXzqecmYZeUEB8OUGHkxJ+I=
 github.com/google/safehtml v0.1.0 h1:EwLKo8qawTKfsi0orxcQAZzu07cICaBeFMegAU9eaT8=
