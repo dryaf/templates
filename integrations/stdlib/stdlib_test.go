@@ -2,8 +2,10 @@
 package stdlib
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -32,7 +34,7 @@ func TestMain(m *testing.M) {
 	symlinkName := "files"
 
 	// Clean up any old symlink from a previously failed test run.
-	_ = os.RemoveAll(symlinkName)
+	_ = os.Remove(symlinkName) // Use os.Remove, not RemoveAll
 
 	// Create the symlink.
 	if err := os.Symlink(symlinkTarget, symlinkName); err != nil {
@@ -44,7 +46,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	// Clean up the symlink after tests are done.
-	if err := os.RemoveAll(symlinkName); err != nil {
+	if err := os.Remove(symlinkName); err != nil { // Use os.Remove, not RemoveAll
 		fmt.Printf("WARNING: Failed to clean up symlink: %v\n", err)
 	}
 
@@ -215,6 +217,23 @@ func TestRenderer_Handler(t *testing.T) {
 	}
 }
 
+func TestRenderer_Handler_Error(t *testing.T) {
+	renderer := setup(t)
+	var logBuf bytes.Buffer
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
+	defer slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
+
+	handler := renderer.Handler("nonexistent", nil)
+	req := httptest.NewRequest(http.MethodGet, "/person", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	logOutput := logBuf.String()
+	if !strings.Contains(logOutput, "failed to execute template") || !strings.Contains(logOutput, "template_name=nonexistent") {
+		t.Errorf("Expected log message on handler error, but got: %s", logOutput)
+	}
+}
+
 func TestRenderer_HandlerWithDataFromContext(t *testing.T) {
 	renderer := setup(t)
 	personData := &Person{Name: "Charlie", Age: 55}
@@ -249,5 +268,29 @@ func TestRenderer_HandlerWithDataFromContext(t *testing.T) {
 	}
 	if !strings.Contains(body, "Age: 55") {
 		t.Error("Expected person's age '55' from context to be rendered")
+	}
+}
+
+func TestRenderer_HandlerWithDataFromContext_Error(t *testing.T) {
+	renderer := setup(t)
+
+	var logBuf bytes.Buffer
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
+	defer slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
+
+	type contextKey string
+	const personKey contextKey = "person"
+
+	handler := renderer.HandlerWithDataFromContext("nonexistent", personKey)
+	req := httptest.NewRequest(http.MethodGet, "/person-from-context", nil)
+	w := httptest.NewRecorder()
+	ctx := context.WithValue(req.Context(), personKey, &Person{})
+	req = req.WithContext(ctx)
+
+	handler.ServeHTTP(w, req)
+
+	logOutput := logBuf.String()
+	if !strings.Contains(logOutput, "failed to execute template") || !strings.Contains(logOutput, "template_name=nonexistent") {
+		t.Errorf("Expected log message on handler error, but got: %s", logOutput)
 	}
 }

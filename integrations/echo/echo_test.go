@@ -1,4 +1,3 @@
-// ==== File: integrations/echo/echo_test.go ====
 package echo
 
 import (
@@ -15,48 +14,34 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// NOTE: We are not using go:embed in this test file anymore.
-// Instead, we create a symlink to the real templates at runtime.
-
 type Person struct {
 	Name string
 	Age  int
 }
 
-// TestMain creates a symlink to the project's template files before running tests,
+// TestMain creates a local symlink to the project's template files before running tests,
 // and removes it afterward. This allows the test to use the real, live templates
 // without duplication and without compile-time embedding issues.
 func TestMain(m *testing.M) {
-	// The target is the actual 'files' directory at the project root.
 	symlinkTarget := "../../files"
-	// The name of the symlink we will create in the current directory.
 	symlinkName := "files"
 
-	// Clean up any old symlink from a previously failed test run.
-	_ = os.RemoveAll(symlinkName)
+	_ = os.Remove(symlinkName)
 
-	// Create the symlink.
 	if err := os.Symlink(symlinkTarget, symlinkName); err != nil {
 		fmt.Printf("FATAL: Failed to create symlink for testing: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Run all tests.
 	code := m.Run()
 
-	// Clean up the symlink after tests are done.
-	if err := os.RemoveAll(symlinkName); err != nil {
-		fmt.Printf("WARNING: Failed to clean up symlink: %v\n", err)
-	}
+	_ = os.Remove(symlinkName)
 
 	os.Exit(code)
 }
 
 // setup creates and initializes an echo.Renderer and echo.Echo instance for testing.
 func setup(t *testing.T) (*echoRenderer, *echo.Echo) {
-	// By passing nil, templates.New() will use the local filesystem.
-	// Thanks to the symlink created in TestMain, it will find and read
-	// the project's actual template files from './files/templates/...'.
 	tmpls := templates.New(nil, nil)
 	tmpls.MustParseTemplates()
 
@@ -68,10 +53,7 @@ func setup(t *testing.T) (*echoRenderer, *echo.Echo) {
 }
 
 func TestNewTemplatesRendererAndRenderer(t *testing.T) {
-	// This test is now less critical as NewTemplatesRenderer is for embed.FS,
-	// but we can ensure it still constructs an object.
 	t.Run("NewTemplatesRenderer", func(t *testing.T) {
-		// We pass a nil embed.FS because we are testing construction, not parsing.
 		renderer := NewTemplatesRenderer(nil, nil)
 		if renderer == nil {
 			t.Fatal("NewTemplatesRenderer returned nil")
@@ -155,8 +137,6 @@ func TestMethodOverrideFormField(t *testing.T) {
 		return c.String(http.StatusOK, "deleted")
 	}
 
-	// Register a handler for the original method (POST) and the target (DELETE)
-	// so the router can find the route before the middleware runs.
 	e.POST("/test", handler)
 	e.DELETE("/test", handler)
 
@@ -187,7 +167,6 @@ func TestCSRFTokenLookup(t *testing.T) {
 		return c.String(http.StatusOK, "submitted")
 	})
 
-	// 1. GET request to establish CSRF cookie
 	req := httptest.NewRequest(http.MethodGet, "/form", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
@@ -202,7 +181,6 @@ func TestCSRFTokenLookup(t *testing.T) {
 	csrfCookie := cookies[0]
 	token := csrfCookie.Value
 
-	// 2. Successful POST with the correct token
 	form := url.Values{}
 	form.Add("csrf", token)
 	req = httptest.NewRequest(http.MethodPost, "/submit", strings.NewReader(form.Encode()))
@@ -218,7 +196,6 @@ func TestCSRFTokenLookup(t *testing.T) {
 		t.Errorf("Expected body 'submitted', got '%s'", rec.Body.String())
 	}
 
-	// 3. Failed POST with a missing token
 	form = url.Values{}
 	req = httptest.NewRequest(http.MethodPost, "/submit", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
