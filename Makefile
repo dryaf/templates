@@ -6,11 +6,14 @@ test:
 	go test ./... -coverpkg=./... -coverprofile=coverage-main.out
 	@echo "Running tests for echo integration module..."
 	(cd integrations/echo && go test -coverprofile=../../coverage-echo.out)
+	@echo "Running tests for chi integration module..."
+	(cd integrations/chi && go test -coverprofile=../../coverage-chi.out)
 	@echo "Combining coverage reports..."
 	@echo "mode: set" > coverage.out
 	@tail -n +2 coverage-main.out >> coverage.out
 	@tail -n +2 coverage-echo.out >> coverage.out
-	@rm coverage-main.out coverage-echo.out
+	@tail -n +2 coverage-chi.out >> coverage.out
+	@rm coverage-main.out coverage-echo.out coverage-chi.out
 
 template-contents:
 	find ./files/templates -type f -exec echo "==> {} <==" \; -exec cat {} \; -exec echo \;

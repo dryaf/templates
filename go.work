@@ -1,8 +1,8 @@
+// ==== File: go.work ====
 go 1.24
-
-toolchain go1.24.5
 
 use (
 	.
+	./integrations/chi
 	./integrations/echo
 )

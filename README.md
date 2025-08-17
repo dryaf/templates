@@ -1,26 +1,3 @@
-Of course. The current README.md has some inaccuracies in the code examples and could be structured more clearly to better showcase the library's features. A makeover would definitely help new users understand and adopt the project.
-
-Here is a revamped README.md that is more professional, accurate, and comprehensive. It includes:
-
-A clearer introduction and feature list.
-
-Corrected and more complete code examples.
-
-A new "Quick Start" section with a standalone example.
-
-Separate, accurate examples for both net/http and Echo integrations.
-
-An explanation of the security model with the new trusted_* functions.
-
-A cleaned-up roadmap.
-
-code
-Text
-download
-content_copy
-expand_less
-
-// ==== File: README.md ====
 # templates
 
 [![License](http://img.shields.io/badge/license-mit-blue.svg?style=flat-square)](https://raw.githubusercontent.com/dryaf/templates/master/LICENSE)
@@ -42,230 +19,175 @@ A secure, file-system-based Go template engine built on Google's `safehtml/templ
 
 ## Installation
 
-```sh
+```shell
+
 go get github.com/dryaf/templates
-Quick Start
 
-Create your template files:
+```
 
-code
-Code
-download
-content_copy
-expand_less
-IGNORE_WHEN_COPYING_START
-IGNORE_WHEN_COPYING_END
-.
-└── files
-    └── templates
-        ├── layouts
-        │   └── application.gohtml
-        └── pages
-            └── home.gohtml
+## Quick Start
 
-files/templates/layouts/application.gohtml:
+1.  **Create your template files:**
 
-code
-Html
-download
-content_copy
-expand_less
-IGNORE_WHEN_COPYING_START
-IGNORE_WHEN_COPYING_END
-{{define "layout"}}
-<!DOCTYPE html>
-<html>
-<head>
-    <title>My App</title>
-</head>
-<body>
-    <h1>Layout</h1>
-    {{block "page" .}}{{end}}
-</body>
-</html>
-{{end}}
+    ```
+    .
+    └── files
+        └── templates
+            ├── layouts
+            │   └── application.gohtml
+            └── pages
+                └── home.gohtml
+    ```
 
-files/templates/pages/home.gohtml:
+    `files/templates/layouts/application.gohtml`:
+    ```html
+    {{define "layout"}}
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>My App</title>
+    </head>
+    <body>
+        <h1>Layout</h1>
+        {{block "page" .}}{{end}}
+    </body>
+    </html>
+    {{end}}
+    ```
 
-code
-Html
-download
-content_copy
-expand_less
-IGNORE_WHEN_COPYING_START
-IGNORE_WHEN_COPYING_END
-{{define "page"}}
-<h2>Home Page</h2>
-<p>Hello, {{.}}!</p>
-{{end}}
+    `files/templates/pages/home.gohtml`:
+    ```html
+    {{define "page"}}
+    <h2>Home Page</h2>
+    <p>Hello, {{.}}!</p>
+    {{end}}
+    ```
 
-Write your Go application:
+2.  **Write your Go application:**
 
-code
-Go
-download
-content_copy
-expand_less
-IGNORE_WHEN_COPYING_START
-IGNORE_WHEN_COPYING_END
-package main
+    ```go
+    package main
 
-import (
-	"log"
-	"net/http"
-	"os"
+    import (
+    	"log"
+    	"net/http"
+    	"os"
 
-	"github.com/dryaf/templates"
-	"github.com/dryaf/templates/integrations/stdlib"
-)
+    	"github.com/dryaf/templates"
+    	"github.com/dryaf/templates/integrations/stdlib"
+    )
 
-func main() {
-	// For development, New(nil, nil) uses the local file system.
-	// For production, you would pass in an embed.FS.
-	tmpls := templates.New(nil, nil)
-	tmpls.AlwaysReloadAndParseTemplates = true // Recommended for development
-	tmpls.MustParseTemplates()
+    func main() {
+    	// For development, New(nil, nil) uses the local file system.
+    	// For production, you would pass in an embed.FS.
+    	tmpls := templates.New(nil, nil)
+    	tmpls.AlwaysReloadAndParseTemplates = true // Recommended for development
+    	tmpls.MustParseTemplates()
 
-	renderer := stdlib.FromTemplates(tmpls)
+    	renderer := stdlib.FromTemplates(tmpls)
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		err := renderer.Render(w, r, "home", "World")
-		if err != nil {
-			log.Println(err)
-			http.Error(w, "Internal Server Error", 500)
-		}
-	})
+    	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+    		err := renderer.Render(w, r, "home", "World")
+    		if err != nil {
+    			log.Println(err)
+    			http.Error(w, "Internal Server Error", 500)
+    		}
+    	})
 
-	log.Println("Starting server on :8080")
-	http.ListenAndServe(":8080", nil)
-}
+    	log.Println("Starting server on :8080")
+    	http.ListenAndServe(":8080", nil)
+    }
+    ```
 
-Run it!
+3.  **Run it!**
 
-code
-Sh
-download
-content_copy
-expand_less
-IGNORE_WHEN_COPYING_START
-IGNORE_WHEN_COPYING_END
-go run .
+    ```sh
+    go run .
+    ```
+    Visit `http://localhost:8080` and see your rendered template.
 
-Visit http://localhost:8080 and see your rendered template.
+## Core Concepts
 
-Core Concepts
-Directory Structure
+### Directory Structure
 
-The engine expects a specific directory structure by default, located at ./files/templates:
+The engine expects a specific directory structure by default, located at `./files/templates`:
 
-files/templates/layouts/: Contains layout templates. Each file defines a "layout".
+-   `files/templates/layouts/`: Contains layout templates. Each file defines a "layout".
+-   `files/templates/pages/`: Contains page templates.
+-   `files/templates/blocks/`: Contains reusable blocks (partials).
 
-files/templates/pages/: Contains page templates.
+### Important Template Rules
 
-files/templates/blocks/: Contains reusable blocks (partials).
+1.  **Pages must define `"page"`**: Every template file in the `pages` directory must define its main content within `{{define "page"}}...{{end}}`.
+2.  **Blocks must define `"_name"`**: Every template file in the `blocks` directory must define a template, and that definition's name must match the filename and be prefixed with an underscore. For example, `_form.gohtml` must contain `{{define "_form"}}...{{end}}`.
 
-Important Template Rules
-
-Pages must define "page": Every template file in the pages directory must define its main content within {{define "page"}}...{{end}}.
-
-Blocks must define "_name": Every template file in the blocks directory must define a template, and that definition's name must match the filename and be prefixed with an underscore. For example, _form.gohtml must contain {{define "_form"}}...{{end}}.
-
-Rendering Syntax
+### Rendering Syntax
 
 You have fine-grained control over how templates are rendered:
 
-"page_name": Renders the page within the default layout (application.gohtml).
+-   `"page_name"`: Renders the page within the default layout (`application.gohtml`).
+-   `"layout_name:page_name"`: Renders the page within a specific layout.
+-   `":page_name"`: Renders the page without any layout.
+-   `"_block_name"`: Renders a specific block by itself.
 
-"layout_name:page_name": Renders the page within a specific layout.
+### Dynamic Blocks (`d_block`)
 
-":page_name": Renders the page without any layout.
+To render a block whose name is determined at runtime (e.g., from a database or CMS API), you can use `d_block`. This is a powerful feature for dynamic page composition.
 
-"_block_name": Renders a specific block by itself.
-
-Dynamic Blocks (d_block)
-
-To render a block whose name is determined at runtime (e.g., from a database or CMS API), you can use d_block. This is a powerful feature for dynamic page composition.
-
-code
-Html
-download
-content_copy
-expand_less
-IGNORE_WHEN_COPYING_START
-IGNORE_WHEN_COPYING_END
+```html
 <!-- Instead of this, which requires the block name to be static: -->
 {{block "_header" .}}{{end}}
 
 <!-- You can do this: -->
 {{d_block .HeaderBlockName .HeaderBlockData}}
-Passing locals to Blocks
+```
 
-Passing maps as context to blocks can be verbose. The locals helper function makes it easy to create a map on the fly. It accepts a sequence of key-value pairs.
+### Passing `locals` to Blocks
 
-code
-Html
-download
-content_copy
-expand_less
-IGNORE_WHEN_COPYING_START
-IGNORE_WHEN_COPYING_END
+Passing maps as context to blocks can be verbose. The `locals` helper function makes it easy to create a map on the fly. It accepts a sequence of key-value pairs.
+
+```html
 <!-- Standard block call with locals -->
 {{block "_user_card" (locals "Name" "Alice" "Age" 30)}}{{end}}
 
 <!-- Dynamic block call with locals -->
 {{locals "Name" "Bob" "Age" 42 | d_block "_user_card"}}
+```
 
-_user_card.gohtml:
-
-code
-Html
-download
-content_copy
-expand_less
-IGNORE_WHEN_COPYING_START
-IGNORE_WHEN_COPYING_END
+`_user_card.gohtml`:
+```html
 {{define "_user_card"}}
 <div class="card">
     <h3>{{.Name}}</h3>
     <p>Age: {{.Age}}</p>
 </div>
 {{end}}
-Security and trusted_* Functions
+```
 
-This library uses safehtml/template, which provides protection against XSS by default. It contextually escapes variables.
+### Security and `trusted_*` Functions
 
-Sometimes, you receive data from a trusted source (like a headless CMS) that you know is safe and should not be escaped. For these cases, you can use the trusted_* template functions, which wrap the input string in the appropriate safehtml type.
+This library uses `safehtml/template`, which provides protection against XSS by default. It contextually escapes variables.
 
-trusted_html: For HTML content.
+Sometimes, you receive data from a trusted source (like a headless CMS) that you know is safe and should not be escaped. For these cases, you can use the `trusted_*` template functions, which wrap the input string in the appropriate `safehtml` type.
 
-trusted_script: For JavaScript code.
+-   `trusted_html`: For HTML content.
+-   `trusted_script`: For JavaScript code.
+-   `trusted_style`: For CSS style declarations.
+-   `trusted_stylesheet`: For a full CSS stylesheet.
+-   `trusted_url`: For a general URL.
+-   `trusted_resource_url`: For a URL that loads a resource like a script or stylesheet.
+-   `trusted_identifier`: For an HTML ID or name attribute.
 
-trusted_style: For CSS style declarations.
-
-trusted_stylesheet: For a full CSS stylesheet.
-
-trusted_url: For a general URL.
-
-trusted_resource_url: For a URL that loads a resource like a script or stylesheet.
-
-trusted_identifier: For an HTML ID or name attribute.
-
-Example:
-
-code
-Html
-download
-content_copy
-expand_less
-IGNORE_WHEN_COPYING_START
-IGNORE_WHEN_COPYING_END
+**Example:**
+```html
 <!-- This will be escaped: -->
 <p>{{.UnsafeHTMLFromUser}}</p>
 
 <!-- This will be rendered verbatim, because you are vouching for its safety: -->
 <div>
     {{trusted_html .SafeHTMLFromCMS}}
-</div>```
+</div>
+```
 
 ## Integrations
 
@@ -288,17 +210,13 @@ http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 
 // Or create a handler that always renders the same template
 http.Handle("/about", renderer.Handler("about", nil))
-Echo
+```
 
-The integrations/echo package provides a renderer and middleware for the Echo framework.
+### Echo
 
-code
-Go
-download
-content_copy
-expand_less
-IGNORE_WHEN_COPYING_START
-IGNORE_WHEN_COPYING_END
+The `integrations/echo` package provides a renderer and middleware for the [Echo framework](https://echo.labstack.com/).
+
+```go
 package main
 
 import (
@@ -333,20 +251,51 @@ func main() {
 
 	e.Logger.Fatal(e.Start(":1323"))
 }
-Roadmap
+```
 
-Implement SSE for Hotwired Turbo Streams.
+### Chi
 
-Add tests for Hotwired Turbo integration.
+The integrations/chi package provides a renderer compatible with the chi router, which uses the standard http.Handler interface.
+code
 
-License
+```go
+package main
+
+import (
+	"log"
+	"net/http"
+
+	"github.com/dryaf/templates"
+	"github.com/dryaf/templates/integrations/chi"
+	"github.com/go-chi/chi/v5"
+)
+
+func main() {
+	tmpls := templates.New(nil, nil)
+	tmpls.AlwaysReloadAndParseTemplates = true // Dev mode
+	tmpls.MustParseTemplates()
+
+	renderer := chi.FromTemplates(tmpls)
+
+	r := chi.NewRouter()
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		err := renderer.Render(w, r, "home", "Chi")
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "Internal Server Error", 500)
+		}
+	})
+
+	log.Println("Starting server on :8080")
+	http.ListenAndServe(":8080", r)
+}
+```
+
+## Roadmap
+
+-   [ ] Implement SSE for Hotwired Turbo Streams.
+-   [ ] Add tests for Hotwired Turbo integration.
+
+## License
 
 This project is licensed under the MIT License.
-
-code
-Code
-download
-content_copy
-expand_less
-IGNORE_WHEN_COPYING_START
-IGNORE_WHEN_COPYING_END
