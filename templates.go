@@ -1,3 +1,4 @@
+// ==== File: templates.go ====
 package templates
 
 import (
@@ -98,7 +99,7 @@ func (t *Templates) AddFuncMapHelpers() {
 	}
 	if t.AddHeadlessCMSFuncMapHelpers {
 		t.AddDynamicBlockToFuncMap()
-		t.AddTrustedHTMLToFuncMap()
+		t.addTrustedConverterFuncs()
 		t.AddLocalsToFuncMap()
 	}
 }
@@ -284,13 +285,22 @@ func (t *Templates) AddDynamicBlockToFuncMap() {
 	t.funcMap["d_block"] = t.RenderBlockAsHTMLString
 }
 
-func (t *Templates) AddTrustedHTMLToFuncMap() {
-	_, ok := t.funcMap["trusted_html"]
-	if ok {
-		slog.Error("function name is already in use in FuncMap", "name", "trusted_html")
-		os.Exit(1)
+func (t *Templates) addTrustedConverterFuncs() {
+	add := func(name string, f any) {
+		if _, ok := t.funcMap[name]; ok {
+			slog.Error("function name is already in use in FuncMap", "name", name)
+			os.Exit(1)
+		}
+		t.funcMap[name] = f
 	}
-	t.funcMap["trusted_html"] = trustedHTML
+
+	add("trusted_html", trustedHTML)
+	add("trusted_script", trustedScript)
+	add("trusted_style", trustedStyle)
+	add("trusted_stylesheet", trustedStyleSheet)
+	add("trusted_url", trustedURL)
+	add("trusted_resource_url", trustedResourceURL)
+	add("trusted_identifier", trustedIdentifier)
 }
 
 func (t *Templates) AddLocalsToFuncMap() {
@@ -348,6 +358,48 @@ func trustedHTML(html any) safehtml.HTML {
 		return uncheckedconversions.HTMLFromStringKnownToSatisfyTypeContract("")
 	}
 	return uncheckedconversions.HTMLFromStringKnownToSatisfyTypeContract(fmt.Sprint(html))
+}
+
+func trustedScript(script any) safehtml.Script {
+	if script == nil {
+		return uncheckedconversions.ScriptFromStringKnownToSatisfyTypeContract("")
+	}
+	return uncheckedconversions.ScriptFromStringKnownToSatisfyTypeContract(fmt.Sprint(script))
+}
+
+func trustedStyle(style any) safehtml.Style {
+	if style == nil {
+		return uncheckedconversions.StyleFromStringKnownToSatisfyTypeContract("")
+	}
+	return uncheckedconversions.StyleFromStringKnownToSatisfyTypeContract(fmt.Sprint(style))
+}
+
+func trustedStyleSheet(ss any) safehtml.StyleSheet {
+	if ss == nil {
+		return uncheckedconversions.StyleSheetFromStringKnownToSatisfyTypeContract("")
+	}
+	return uncheckedconversions.StyleSheetFromStringKnownToSatisfyTypeContract(fmt.Sprint(ss))
+}
+
+func trustedURL(url any) safehtml.URL {
+	if url == nil {
+		return uncheckedconversions.URLFromStringKnownToSatisfyTypeContract("")
+	}
+	return uncheckedconversions.URLFromStringKnownToSatisfyTypeContract(fmt.Sprint(url))
+}
+
+func trustedResourceURL(url any) safehtml.TrustedResourceURL {
+	if url == nil {
+		return uncheckedconversions.TrustedResourceURLFromStringKnownToSatisfyTypeContract("")
+	}
+	return uncheckedconversions.TrustedResourceURLFromStringKnownToSatisfyTypeContract(fmt.Sprint(url))
+}
+
+func trustedIdentifier(id any) safehtml.Identifier {
+	if id == nil {
+		return uncheckedconversions.IdentifierFromStringKnownToSatisfyTypeContract("")
+	}
+	return uncheckedconversions.IdentifierFromStringKnownToSatisfyTypeContract(fmt.Sprint(id))
 }
 
 func Locals(args ...any) map[string]any {

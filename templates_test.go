@@ -101,6 +101,71 @@ func TestRendering(t *testing.T) {
 				}
 			})
 
+			t.Run("TrustedScript", func(t *testing.T) {
+				res, err := tmpls.ExecuteTemplateAsText(nil, "trusted_script_page", "alert('hello')")
+				failOnErr(t, err)
+				expected := "<script>alert('hello')</script>"
+				if !strings.Contains(res, expected) {
+					t.Errorf("Expected to contain %q, got %q", expected, res)
+				}
+			})
+
+			t.Run("TrustedStyle", func(t *testing.T) {
+				res, err := tmpls.ExecuteTemplateAsText(nil, "trusted_style_page", "width: 10px;")
+				failOnErr(t, err)
+				expected := `<div style="width: 10px;">...</div>`
+				if !strings.Contains(res, expected) {
+					t.Errorf("Expected to contain %q, got %q", expected, res)
+				}
+			})
+
+			t.Run("TrustedStyleSheet", func(t *testing.T) {
+				res, err := tmpls.ExecuteTemplateAsText(nil, "trusted_stylesheet_page", "body { color: red; }")
+				failOnErr(t, err)
+				expected := "<style>body { color: red; }</style>"
+				if !strings.Contains(res, expected) {
+					t.Errorf("Expected to contain %q, got %q", expected, res)
+				}
+			})
+
+			t.Run("TrustedURL", func(t *testing.T) {
+				res, err := tmpls.ExecuteTemplateAsText(nil, "trusted_url_page", "http://example.com?a=b&c=d")
+				failOnErr(t, err)
+				expected := `<a href="http://example.com?a=b&amp;c=d">link</a>`
+				if !strings.Contains(res, expected) {
+					t.Errorf("Expected to contain %q, got %q", expected, res)
+				}
+			})
+
+			t.Run("TrustedURL_Javascript", func(t *testing.T) {
+				res, err := tmpls.ExecuteTemplateAsText(nil, "trusted_url_page", "javascript:alert(1)")
+				failOnErr(t, err)
+				// The safehtml/template engine URL-encodes special characters in hrefs
+				// even for trusted types. This is a security feature.
+				expected := `<a href="javascript:alert%281%29">link</a>`
+				if !strings.Contains(res, expected) {
+					t.Errorf("Expected to contain %q, got %q", expected, res)
+				}
+			})
+
+			t.Run("TrustedResourceURL", func(t *testing.T) {
+				res, err := tmpls.ExecuteTemplateAsText(nil, "trusted_resource_url_page", "/foo.js")
+				failOnErr(t, err)
+				expected := `<script src="/foo.js"></script>`
+				if !strings.Contains(res, expected) {
+					t.Errorf("Expected to contain %q, got %q", expected, res)
+				}
+			})
+
+			t.Run("TrustedIdentifier", func(t *testing.T) {
+				res, err := tmpls.ExecuteTemplateAsText(nil, "trusted_identifier_page", "my-id")
+				failOnErr(t, err)
+				expected := `<div id="my-id">...</div>`
+				if !strings.Contains(res, expected) {
+					t.Errorf("Expected to contain %q, got %q", expected, res)
+				}
+			})
+
 			t.Run("Layout", func(t *testing.T) {
 				res, err := tmpls.ExecuteTemplateAsText(nil, "special:sample_page", "test")
 				failOnErr(t, err)
@@ -229,7 +294,12 @@ func TestRendering(t *testing.T) {
 
 			t.Run("GetParsedTemplates", func(t *testing.T) {
 				keys := tmpls.GetParsedTemplates()
-				expectedCount := 15 // Based on the number of pages, layouts, and blocks
+				// Based on the number of pages, layouts, and blocks
+				// 10 pages * 2 layouts = 20
+				// 10 pages (no layout) = 10
+				// 3 blocks = 3
+				// Total = 33
+				expectedCount := 33
 				if len(keys) != expectedCount {
 					t.Errorf("Expected %d parsed templates, but got %d: %v", expectedCount, len(keys), keys)
 				}
@@ -319,18 +389,53 @@ func Test_AddFuncMapHelpers_Disabled(t *testing.T) {
 	if _, ok := tpls.funcMap["d_block"]; ok {
 		t.Error(`d_block helper should not exist if AddHeadlessCMSFuncMapHelpers is false`)
 	}
-	if _, ok := tpls.funcMap["trusted_html"]; ok {
-		t.Error(`trusted_html helper should not exist if AddHeadlessCMSFuncMapHelpers is false`)
-	}
 	if _, ok := tpls.funcMap["locals"]; ok {
 		t.Error(`locals helper should not exist if AddHeadlessCMSFuncMapHelpers is false`)
 	}
+	if _, ok := tpls.funcMap["trusted_html"]; ok {
+		t.Error(`trusted_html helper should not exist if AddHeadlessCMSFuncMapHelpers is false`)
+	}
+	if _, ok := tpls.funcMap["trusted_script"]; ok {
+		t.Error(`trusted_script helper should not exist if AddHeadlessCMSFuncMapHelpers is false`)
+	}
+	if _, ok := tpls.funcMap["trusted_style"]; ok {
+		t.Error(`trusted_style helper should not exist if AddHeadlessCMSFuncMapHelpers is false`)
+	}
+	if _, ok := tpls.funcMap["trusted_stylesheet"]; ok {
+		t.Error(`trusted_stylesheet helper should not exist if AddHeadlessCMSFuncMapHelpers is false`)
+	}
+	if _, ok := tpls.funcMap["trusted_url"]; ok {
+		t.Error(`trusted_url helper should not exist if AddHeadlessCMSFuncMapHelpers is false`)
+	}
+	if _, ok := tpls.funcMap["trusted_resource_url"]; ok {
+		t.Error(`trusted_resource_url helper should not exist if AddHeadlessCMSFuncMapHelpers is false`)
+	}
+	if _, ok := tpls.funcMap["trusted_identifier"]; ok {
+		t.Error(`trusted_identifier helper should not exist if AddHeadlessCMSFuncMapHelpers is false`)
+	}
 }
 
-func Test_trustedHTML_nil(t *testing.T) {
-	res := trustedHTML(nil)
-	if res.String() != "" {
-		t.Errorf(`Expected trustedHTML(nil) to return an empty safehtml.HTML, but got %q`, res.String())
+func Test_trustedConverters_nil(t *testing.T) {
+	if trustedHTML(nil).String() != "" {
+		t.Errorf(`Expected trustedHTML(nil) to return an empty safehtml.HTML, but got %q`, trustedHTML(nil).String())
+	}
+	if trustedScript(nil).String() != "" {
+		t.Errorf(`Expected trustedScript(nil) to return an empty safehtml.Script, but got %q`, trustedScript(nil).String())
+	}
+	if trustedStyle(nil).String() != "" {
+		t.Errorf(`Expected trustedStyle(nil) to return an empty safehtml.Style, but got %q`, trustedStyle(nil).String())
+	}
+	if trustedStyleSheet(nil).String() != "" {
+		t.Errorf(`Expected trustedStyleSheet(nil) to return an empty safehtml.StyleSheet, but got %q`, trustedStyleSheet(nil).String())
+	}
+	if trustedURL(nil).String() != "" {
+		t.Errorf(`Expected trustedURL(nil) to return an empty safehtml.URL, but got %q`, trustedURL(nil).String())
+	}
+	if trustedResourceURL(nil).String() != "" {
+		t.Errorf(`Expected trustedResourceURL(nil) to return an empty safehtml.TrustedResourceURL, but got %q`, trustedResourceURL(nil).String())
+	}
+	if trustedIdentifier(nil).String() != "" {
+		t.Errorf(`Expected trustedIdentifier(nil) to return an empty safehtml.Identifier, but got %q`, trustedIdentifier(nil).String())
 	}
 }
 
