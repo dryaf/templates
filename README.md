@@ -27,7 +27,8 @@ This library provides a simple, opinionated framework around `safehtml/template`
 
 Add the library to your `go.mod` file:
 ```shell
-go get github.com/dryaf/templates```
+go get github.com/dryaf/templates
+```
 
 Then import it in your code:
 ```go
