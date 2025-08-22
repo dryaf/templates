@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.5
 
 require (
-	github.com/dryaf/templates v0.0.0
+	github.com/dryaf/templates v1.0.2
 	github.com/google/safehtml v0.1.1-0.20250618200626-e177c9cd28ca
 	github.com/labstack/echo/v4 v4.13.4
 )

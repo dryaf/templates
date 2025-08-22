@@ -9,6 +9,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dryaf/templates/integrations/gin v0.0.0-20250822221651-2b72f52fe807 h1:Sj7p0dyFSYFuGxkOVxekNdGtcv9TAzzf22m+Tas/p4A=
 github.com/dryaf/templates/integrations/gin v0.0.0-20250822221651-2b72f52fe807/go.mod h1:gQv8NwEBJaDr60S03kwGY1z8OgsrtXPxgzcElYtoU3A=
+github.com/dryaf/templates/integrations/gin v0.0.0-20250822233211-d72f50e7b22c h1:hjjv0+D+KBie1Nk99cgzpKGoE4JZyp1QSQYIdhibejw=
+github.com/dryaf/templates/integrations/gin v0.0.0-20250822233211-d72f50e7b22c/go.mod h1:m+tWlqhnKLbiRccpq+lHAlG2WJ5u8AE/feJRG/gHsww=
 github.com/gabriel-vasile/mimetype v1.4.9 h1:5k+WDwEsD9eTLL8Tz3L0VnmVh9QxGjRmjBvAG7U/oYY=
 github.com/gabriel-vasile/mimetype v1.4.9/go.mod h1:WnSQhFKJuBlRyLiKohA/2DtIlPFAbguNaG7QCHcyGok=
 github.com/gin-contrib/sse v1.1.0 h1:n0w2GMuUpWDVp7qSpvze6fAu9iRxJY4Hmj6AmBOU05w=

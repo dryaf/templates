@@ -1,5 +1,7 @@
 github.com/dryaf/templates/integrations/stdlib v0.0.0-20250822221651-2b72f52fe807 h1:jjwIPa92/tvyURjFp9LYM2dNoz9/KFAlJXPGAHFB3NE=
 github.com/dryaf/templates/integrations/stdlib v0.0.0-20250822221651-2b72f52fe807/go.mod h1:Bg7qZgvWmosgakiPIfxHYYcLaBFWdD1FBo4vpeK3sag=
+github.com/dryaf/templates/integrations/stdlib v0.0.0-20250822233211-d72f50e7b22c h1:PN726zNTAMriUxs6OjrsyGjrd3w3HlnF6OrwGCfddiQ=
+github.com/dryaf/templates/integrations/stdlib v0.0.0-20250822233211-d72f50e7b22c/go.mod h1:IVGQtJ5/C/+muituGj4sKo+NXRpBVA9wjhKpGjHTFN4=
 github.com/google/safehtml v0.1.1-0.20250618200626-e177c9cd28ca h1:aL2qeu+iCHfixWpOTL4Utl5OiuJTwBdmZgSuNe2HpSY=
 github.com/google/safehtml v0.1.1-0.20250618200626-e177c9cd28ca/go.mod h1:ses04bNFagkcb3YeHX2ozsdZyOU/Rh6mqMtwiEoLkmQ=
 golang.org/x/text v0.3.3/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=

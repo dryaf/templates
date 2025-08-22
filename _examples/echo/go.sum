@@ -2,6 +2,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dryaf/templates/integrations/echo v0.0.0-20250822221651-2b72f52fe807 h1:b8UrIw94ZajpOpoKT6j75IVWTxi9shjlXwPRsqIAB10=
 github.com/dryaf/templates/integrations/echo v0.0.0-20250822221651-2b72f52fe807/go.mod h1:fRHE1G2icEAbM5DTvTXFatYg795B/pN22NR85oViU+c=
+github.com/dryaf/templates/integrations/echo v0.0.0-20250822232731-d1e71f892d6a h1:z7yketg/UBYbhDawTFJbifkznVFJgPY8L/xiW7ljcEE=
+github.com/dryaf/templates/integrations/echo v0.0.0-20250822232731-d1e71f892d6a/go.mod h1:+hajZ0VtpPc6Lxuu3pHabkU+GHypA8sinhCHHsoePIM=
 github.com/google/safehtml v0.1.1-0.20250618200626-e177c9cd28ca h1:aL2qeu+iCHfixWpOTL4Utl5OiuJTwBdmZgSuNe2HpSY=
 github.com/google/safehtml v0.1.1-0.20250618200626-e177c9cd28ca/go.mod h1:ses04bNFagkcb3YeHX2ozsdZyOU/Rh6mqMtwiEoLkmQ=
 github.com/labstack/echo/v4 v4.13.4 h1:oTZZW+T3s9gAu5L8vmzihV7/lkXGZuITzTQkTEhcXEA=
