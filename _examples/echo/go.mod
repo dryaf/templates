@@ -6,7 +6,7 @@ go 1.24.0
 toolchain go1.24.5
 
 require (
-	github.com/dryaf/templates v1.0.0
+	github.com/dryaf/templates v0.0.0
 	github.com/dryaf/templates/integrations/echo v0.0.0-20250822221651-2b72f52fe807
 	github.com/labstack/echo/v4 v4.13.4
 )

@@ -259,23 +259,6 @@ r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 })
 ```
 
-### Chi with go-chi/render
-
-The `integrations/chirender` package provides a custom responder for `go-chi/render` to seamlessly render HTML templates alongside JSON/XML API endpoints.
-
-```go
-import "github.com/dryaf/templates/integrations/chirender"
-import "github.com/go-chi/render"
-// ...
-// Set the custom HTML responder once at startup
-render.Respond = chirender.HTML
-
-r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-    // render.Respond can now render your templates
-    render.Respond(w, r, chirender.New(tmpls, "home", "Chi with Render"))
-})
-```
-
 ### Gin
 
 The `integrations/gin` package provides a renderer that implements `gin.HTMLRender` for the [Gin framework](https://gin-gonic.com/).

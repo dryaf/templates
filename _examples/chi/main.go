@@ -1,4 +1,3 @@
-// ==== File: _examples/chi/main.go ====
 package main
 
 import (
@@ -48,7 +47,7 @@ func main() {
 		tmpls.AlwaysReloadAndParseTemplates = true
 	}
 	tmpls.MustParseTemplates()
-	renderer := templates_chi.FromTemplates(tmpls)
+	template := templates_chi.FromTemplates(tmpls)
 
 	// --- Mock Data ---
 	personData := &Person{Name: "Chianti", Age: 50}
@@ -72,19 +71,19 @@ func main() {
 
 	// --- Routes ---
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		renderer.Render(w, r, "home", homeData)
+		template.Render(w, r, http.StatusOK, "home", homeData)
 	})
 	r.Get("/person", func(w http.ResponseWriter, r *http.Request) {
-		renderer.Render(w, r, "person", personData)
+		template.Render(w, r, http.StatusOK, "person", personData)
 	})
 	r.Get("/person-special", func(w http.ResponseWriter, r *http.Request) {
-		renderer.Render(w, r, "special:person", personData)
+		template.Render(w, r, http.StatusOK, "special:person", personData)
 	})
 	r.Get("/person-nolayout", func(w http.ResponseWriter, r *http.Request) {
-		renderer.Render(w, r, ":person", personData)
+		template.Render(w, r, http.StatusOK, ":person", personData)
 	})
 	r.Get("/cms", func(w http.ResponseWriter, r *http.Request) {
-		renderer.Render(w, r, "cms_page", cmsData)
+		template.Render(w, r, http.StatusOK, "cms_page", cmsData)
 	})
 
 	// --- Group with Middleware for Context Layout ---
@@ -96,7 +95,7 @@ func main() {
 			})
 		})
 		r.Get("/admin/dashboard", func(w http.ResponseWriter, r *http.Request) {
-			renderer.Render(w, r, "person", &Person{Name: "Admin (from Chi context)", Age: 101})
+			template.Render(w, r, http.StatusOK, "person", &Person{Name: "Admin (from Chi context)", Age: 101})
 		})
 	})
 

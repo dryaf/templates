@@ -30,14 +30,17 @@ func FromTemplates(t *templates.Templates) *Renderer {
 	return &Renderer{t}
 }
 
-// Render executes a template and writes the output to the http.ResponseWriter.
+// Render executes a template, sets the HTTP status code, and writes the output
+// to the http.ResponseWriter.
 //
 // Parameters:
 //   - w: The http.ResponseWriter to write the rendered output to.
 //   - req: The *http.Request, used to access context for layout selection.
+//   - status: The HTTP status code to write.
 //   - name: The template name to render, using the "layout:page" or ":page" syntax.
 //   - data: The data to pass to the template.
-func (r *Renderer) Render(w http.ResponseWriter, req *http.Request, name string, data interface{}) error {
+func (r *Renderer) Render(w http.ResponseWriter, req *http.Request, status int, name string, data interface{}) error {
+	w.WriteHeader(status)
 	return r.ExecuteTemplate(w, req, name, data)
 }
 

@@ -51,7 +51,7 @@ func main() {
 		tmpls.AlwaysReloadAndParseTemplates = true
 	}
 	tmpls.MustParseTemplates()
-	renderer := stdlib.FromTemplates(tmpls)
+	template := stdlib.FromTemplates(tmpls)
 
 	// --- Mock Data ---
 	personData := &Person{Name: "Bartholomew", Age: 42}
@@ -80,25 +80,25 @@ func main() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		renderer.Render(w, r, "home", homeData)
+		template.Render(w, r, http.StatusOK, "home", homeData)
 	})
 	mux.HandleFunc("/person", func(w http.ResponseWriter, r *http.Request) {
-		renderer.Render(w, r, "person", personData)
+		template.Render(w, r, http.StatusOK, "person", personData)
 	})
 	mux.HandleFunc("/person-special", func(w http.ResponseWriter, r *http.Request) {
-		renderer.Render(w, r, "special:person", personData)
+		template.Render(w, r, http.StatusOK, "special:person", personData)
 	})
 	mux.HandleFunc("/person-nolayout", func(w http.ResponseWriter, r *http.Request) {
-		renderer.Render(w, r, ":person", personData)
+		template.Render(w, r, http.StatusOK, ":person", personData)
 	})
 	mux.HandleFunc("/cms", func(w http.ResponseWriter, r *http.Request) {
-		renderer.Render(w, r, "cms_page", cmsData)
+		template.Render(w, r, http.StatusOK, "cms_page", cmsData)
 	})
 
 	// --- Group with Middleware ---
 	adminMux := http.NewServeMux()
 	adminMux.HandleFunc("/dashboard", func(w http.ResponseWriter, r *http.Request) {
-		renderer.Render(w, r, "person", &Person{Name: "Admin User", Age: 99})
+		template.Render(w, r, http.StatusOK, "person", &Person{Name: "Admin User", Age: 99})
 	})
 	mux.Handle("/admin/", http.StripPrefix("/admin", adminLayoutMiddleware(adminMux)))
 

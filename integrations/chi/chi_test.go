@@ -81,9 +81,13 @@ func TestRenderer_Render(t *testing.T) {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 
-		err := renderer.Render(w, req, "person", personData)
+		err := renderer.Render(w, req, http.StatusAccepted, "person", personData)
 		if err != nil {
 			t.Fatalf("Render failed: %v", err)
+		}
+
+		if w.Code != http.StatusAccepted {
+			t.Errorf("Expected status code %d, but got %d", http.StatusAccepted, w.Code)
 		}
 
 		body := w.Body.String()
@@ -102,7 +106,7 @@ func TestRenderer_Render(t *testing.T) {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 
-		err := renderer.Render(w, req, "special:person", personData)
+		err := renderer.Render(w, req, http.StatusOK, "special:person", personData)
 		if err != nil {
 			t.Fatalf("Render failed: %v", err)
 		}
@@ -120,7 +124,7 @@ func TestRenderer_Render(t *testing.T) {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 
-		err := renderer.Render(w, req, ":person", personData)
+		err := renderer.Render(w, req, http.StatusOK, ":person", personData)
 		if err != nil {
 			t.Fatalf("Render failed: %v", err)
 		}
@@ -141,7 +145,7 @@ func TestRenderer_Render(t *testing.T) {
 		ctx := context.WithValue(req.Context(), templates.LayoutContextKey{}, "special")
 		req = req.WithContext(ctx)
 
-		err := renderer.Render(w, req, "person", personData)
+		err := renderer.Render(w, req, http.StatusOK, "person", personData)
 		if err != nil {
 			t.Fatalf("Render failed: %v", err)
 		}
@@ -159,12 +163,15 @@ func TestRenderer_Render(t *testing.T) {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 
-		err := renderer.Render(w, req, "nonexistent_page", nil)
+		err := renderer.Render(w, req, http.StatusNotFound, "nonexistent_page", nil)
 		if err == nil {
 			t.Fatal("Expected an error for a non-existent template, but got nil")
 		}
 		if !strings.Contains(err.Error(), "template: name not found") {
 			t.Errorf("Expected error to contain 'template: name not found', but got: %v", err)
+		}
+		if w.Code != http.StatusNotFound {
+			t.Errorf("Expected status code %d even on error, but got %d", http.StatusNotFound, w.Code)
 		}
 	})
 }
@@ -273,7 +280,7 @@ func TestRenderer_WithChiRouter(t *testing.T) {
 
 	r := chi.NewRouter()
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		err := renderer.Render(w, r, "person", personData)
+		err := renderer.Render(w, r, http.StatusOK, "person", personData)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}

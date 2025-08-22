@@ -6,12 +6,10 @@ toolchain go1.24.5
 use (
 	.
 	./_examples/chi
-	./_examples/chirender
 	./_examples/echo
 	./_examples/gin
 	./_examples/stdlib
 	./integrations/chi
-	./integrations/chirender
 	./integrations/echo
 	./integrations/gin
 	./integrations/stdlib
