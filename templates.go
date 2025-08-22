@@ -3,10 +3,12 @@ package templates
 
 import (
 	"bytes"
+	"embed"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"os"
 	"path"
@@ -14,10 +16,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-
-	"embed"
-
-	"log/slog"
 
 	"github.com/google/safehtml"
 	"github.com/google/safehtml/template"
@@ -58,21 +56,36 @@ type Templates struct {
 	templatesLock sync.RWMutex
 }
 
-// New return new Templates with default configs and templates functions to support headless cms
-func New(efs *embed.FS, fnMap template.FuncMap) *Templates {
+// New creates a new Templates instance from a filesystem.
+// The `fsys` parameter should be the filesystem containing the templates, typically rooted at the project directory.
+//
+// - If `fsys` is `nil`, it defaults to the operating system's file system.
+// - If `fsys` is an `*embed.FS`, it will be used for production builds.
+//
+// Due to security constraints in the underlying `safehtml/template` library, only `*embed.FS` and `nil` (OS filesystem) are supported.
+// Providing any other `fs.FS` implementation will cause a panic.
+func New(fsys fs.FS, fnMap template.FuncMap) *Templates {
 
 	var trustedFileSystem template.TrustedFS
-	var fileSystem fs.FS
-	if efs != nil {
-		fsys, err := fs.Sub(*efs, templatesPath)
-		if err != nil {
-			panic(fmt.Errorf("unable to create file system: %w", err))
-		}
-		fileSystem = fsys
-		trustedFileSystem = template.TrustedFSFromEmbed(*efs)
-	} else {
-		fileSystem = os.DirFS(templatesPath)
+	var fileSystemForParsing fs.FS
+	isEmbed := false
+
+	switch v := fsys.(type) {
+	case nil:
+		// Default to OS filesystem.
+		fileSystemForParsing = os.DirFS(templatesPath)
 		trustedFileSystem = template.TrustedFSFromTrustedSource(template.TrustedSourceFromConstant(templatesPath))
+	case *embed.FS:
+		// It's an embedded filesystem.
+		sub, err := fs.Sub(v, templatesPath)
+		if err != nil {
+			panic(fmt.Errorf("unable to create sub-filesystem for templates: %w", err))
+		}
+		fileSystemForParsing = sub
+		trustedFileSystem = template.TrustedFSFromEmbed(*v)
+		isEmbed = true
+	default:
+		panic("templates.New: provided fsys is not an *embed.FS or nil. Due to security constraints in the underlying safehtml/template library, only embedded filesystems or the OS filesystem (when fsys is nil) are supported.")
 	}
 
 	t := &Templates{
@@ -86,9 +99,9 @@ func New(efs *embed.FS, fnMap template.FuncMap) *Templates {
 		Logger:                       slog.Default(),
 		funcMap:                      fnMap,
 
-		fileSystem:        fileSystem,
+		fileSystem:        fileSystemForParsing,
 		fileSystemTrusted: trustedFileSystem,
-		fileSystemIsEmbed: efs != nil,
+		fileSystemIsEmbed: isEmbed,
 	}
 
 	t.AddFuncMapHelpers()
@@ -283,7 +296,7 @@ func (t *Templates) AddDynamicBlockToFuncMap() {
 	_, ok := t.funcMap["d_block"]
 	if ok {
 		t.Logger.Error("function name is already in use in FuncMap", "name", "d_block")
-		os.Exit(1)
+		panic("function name 'd_block' is already in use in FuncMap")
 	}
 	t.funcMap["d_block"] = t.RenderBlockAsHTMLString
 }
@@ -292,7 +305,7 @@ func (t *Templates) addTrustedConverterFuncs() {
 	add := func(name string, f any) {
 		if _, ok := t.funcMap[name]; ok {
 			t.Logger.Error("function name is already in use in FuncMap", "name", name)
-			os.Exit(1)
+			panic(fmt.Sprintf("function name %q is already in use in FuncMap", name))
 		}
 		t.funcMap[name] = f
 	}
@@ -310,7 +323,7 @@ func (t *Templates) AddLocalsToFuncMap() {
 	_, ok := t.funcMap["locals"]
 	if ok {
 		t.Logger.Error("function name is already in use in FuncMap", "name", "locals")
-		os.Exit(1)
+		panic("function name 'locals' is already in use in FuncMap")
 	}
 	t.funcMap["locals"] = Locals
 }
@@ -421,7 +434,7 @@ func Locals(args ...any) map[string]any {
 func (t *Templates) fatalOnErr(err error) {
 	if err != nil {
 		t.Logger.Error("fatal error during setup", "error", err)
-		os.Exit(1)
+		panic(err)
 	}
 }
 

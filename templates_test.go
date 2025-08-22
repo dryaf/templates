@@ -366,6 +366,198 @@ func TestRendering(t *testing.T) {
 
 // --- Standalone tests that don't depend on a full template setup ---
 
+// unsupportedFS is a dummy fs.FS implementation for testing panics.
+type unsupportedFS struct{}
+
+func (u *unsupportedFS) Open(name string) (fs.File, error) {
+	return nil, fs.ErrInvalid
+}
+
+func TestErrorsAndPanics(t *testing.T) {
+	t.Run("New_UnsupportedFS", func(t *testing.T) {
+		defer func() {
+			r := recover()
+			if r == nil {
+				t.Fatal("expected a panic but did not get one")
+			}
+			msg, ok := r.(string)
+			if !ok {
+				t.Fatalf("expected panic message to be a string, got %T", r)
+			}
+			if !strings.Contains(msg, "provided fsys is not an *embed.FS or nil") {
+				t.Errorf("expected panic message to contain 'provided fsys is not an *embed.FS or nil', but got %q", msg)
+			}
+		}()
+		New(&unsupportedFS{}, nil)
+	})
+
+	t.Run("New_BadEmbedFS", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatal("expected a panic but did not get one")
+			}
+		}()
+		// This should succeed, but the returned filesystem is empty.
+		var badFS embed.FS
+		tmpls := New(&badFS, nil)
+		tmpls.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+		// This should panic because the required directories are not in the empty FS.
+		tmpls.MustParseTemplates()
+	})
+
+	t.Run("MustParseTemplates_Panic", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatal("expected a panic but did not get one")
+			}
+		}()
+		tmpls := New(nil, nil)
+		tmpls.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+		// Point to a non-existent directory to force a parsing error
+		tmpls.fileSystem = os.DirFS("non-existent-dir")
+		tmpls.MustParseTemplates() // This should panic
+	})
+
+	t.Run("DuplicateFuncMapPanics", func(t *testing.T) {
+		testCases := []struct {
+			name  string
+			setup func(fm template.FuncMap)
+		}{
+			{"d_block", func(fm template.FuncMap) { fm["d_block"] = func() {} }},
+			{"trusted_html", func(fm template.FuncMap) { fm["trusted_html"] = func() {} }},
+			{"locals", func(fm template.FuncMap) { fm["locals"] = func() {} }},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				defer func() {
+					if r := recover(); r == nil {
+						t.Errorf("Expected panic for duplicate function %q", tc.name)
+					}
+				}()
+				tmpls := New(nil, template.FuncMap{})
+				tmpls.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+				tc.setup(tmpls.funcMap)
+				tmpls.AddFuncMapHelpers() // This should panic
+			})
+		}
+	})
+
+	t.Run("ParseTemplates_SyntaxError", func(t *testing.T) {
+		dir, err := ioutil.TempDir("", "syntax-error")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(dir)
+
+		// Create a valid structure but with a broken template file
+		if err := os.MkdirAll(filepath.Join(dir, "layouts"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(dir, "pages"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := ioutil.WriteFile(filepath.Join(dir, "layouts/app.gohtml"), []byte(`{{define "layout"}}{{block "page" .}}{{end}}{{end}}`), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := ioutil.WriteFile(filepath.Join(dir, "pages/broken.gohtml"), []byte(`{{define "page"}}{{if}}{{end}}`), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Use a chdir hack to make the relative paths work for the test
+		wd, _ := os.Getwd()
+		if err := os.Chdir(filepath.Dir(dir)); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chdir(wd)
+
+		tmpls := New(nil, nil)
+		// The templates path is now relative to the temp dir parent
+		tmpls.fileSystem = os.DirFS(filepath.Base(dir))
+		err = tmpls.ParseTemplates()
+		if err == nil {
+			t.Fatal("Expected a syntax error during parsing, but got nil")
+		}
+	})
+
+	t.Run("ExecuteTemplate_ReloadError", func(t *testing.T) {
+		tmpfile, err := ioutil.TempFile("", "reload-*.gohtml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(tmpfile.Name())
+
+		// We need to create the full directory structure for New(nil,nil) to work
+		dir := filepath.Dir(tmpfile.Name())
+		pageDir := filepath.Join(dir, "files/templates/pages")
+		layoutDir := filepath.Join(dir, "files/templates/layouts")
+		blockDir := filepath.Join(dir, "files/templates/blocks")
+		os.MkdirAll(pageDir, 0755)
+		os.MkdirAll(layoutDir, 0755)
+		os.MkdirAll(blockDir, 0755)
+		defer os.RemoveAll(filepath.Join(dir, "files"))
+
+		// Write initial valid files
+		pagePath := filepath.Join(pageDir, "reload.gohtml")
+		layoutPath := filepath.Join(layoutDir, "application.gohtml")
+		if err := ioutil.WriteFile(pagePath, []byte(`{{define "page"}}OK{{end}}`), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := ioutil.WriteFile(layoutPath, []byte(`{{define "layout"}}{{block "page" .}}{{end}}{{end}}`), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		wd, _ := os.Getwd()
+		if err := os.Chdir(dir); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chdir(wd)
+
+		tmpls := New(nil, nil)
+		tmpls.AlwaysReloadAndParseTemplates = true
+		tmpls.MustParseTemplates()
+
+		// First render should succeed
+		_, err = tmpls.ExecuteTemplateAsText(nil, "reload", nil)
+		if err != nil {
+			t.Fatalf("Initial render failed: %v", err)
+		}
+
+		// Now, corrupt the template
+		if err := ioutil.WriteFile(pagePath, []byte(`{{define "page"}}{{if}}{{end}}`), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Second render should fail
+		_, err = tmpls.ExecuteTemplateAsText(nil, "reload", nil)
+		if err == nil {
+			t.Fatal("Expected error on second render but got nil")
+		}
+	})
+
+	t.Run("RenderBlockAsHTMLString_ExecutionError", func(t *testing.T) {
+		tmpls := New(nil, nil)
+		tmpls.funcMap = template.FuncMap{} // Ensure no unexpected funcs
+		tmpls.templates = make(map[string]*template.Template)
+
+		// Create a block that will fail on execution (indexing a nil map)
+		// but is valid at parse time.
+		tpl, err := template.New("_bad_block").Parse(`{{define "_bad_block"}}{{index . "foo"}}{{end}}`)
+		if err != nil {
+			t.Fatalf("Failed to parse bad block template: %v", err)
+		}
+		tmpls.templates["_bad_block"] = tpl
+
+		_, err = tmpls.RenderBlockAsHTMLString("_bad_block", nil)
+		if err == nil {
+			t.Fatal("Expected an execution error but got nil")
+		}
+		if !strings.Contains(err.Error(), "index of untyped nil") {
+			t.Errorf("Expected error about nil index, got: %v", err)
+		}
+	})
+}
+
 func Test_Locals(t *testing.T) {
 	a := Locals("a", "a1", "b", 2, "c", 23.23)
 	if a["a"] != "a1" {
@@ -472,6 +664,7 @@ func Test_cleanPath(t *testing.T) {
 
 // --- Mocks for testing error paths ---
 
+// mockErrorFS now correctly implements fs.FS
 type mockErrorFS struct {
 	openErr    error
 	readdirErr error
@@ -481,16 +674,29 @@ func (mfs *mockErrorFS) Open(name string) (fs.File, error) {
 	if mfs.openErr != nil {
 		return nil, mfs.openErr
 	}
+	// Return a file that will error on Readdir
 	return &mockErrorFile{readdirErr: mfs.readdirErr}, nil
 }
 
+// mockErrorFile now correctly implements fs.File and http.File
 type mockErrorFile struct {
 	readdirErr error
+	fs.File
 }
 
 func (mef *mockErrorFile) Stat() (fs.FileInfo, error) { return &mockFileInfo{isDir: true}, nil }
 func (mef *mockErrorFile) Read([]byte) (int, error)   { return 0, io.EOF }
 func (mef *mockErrorFile) Close() error               { return nil }
+
+// Readdir is for the http.File interface
+func (mef *mockErrorFile) Readdir(count int) ([]fs.FileInfo, error) {
+	if mef.readdirErr != nil {
+		return nil, mef.readdirErr
+	}
+	return []fs.FileInfo{}, nil
+}
+
+// ReadDir is for the fs.ReadDirFile interface (part of fs.File)
 func (mef *mockErrorFile) ReadDir(n int) ([]fs.DirEntry, error) {
 	if mef.readdirErr != nil {
 		return nil, mef.readdirErr
@@ -620,7 +826,11 @@ func TestParseTemplatesErrors(t *testing.T) {
 
 	t.Run("getFilePathsInDir readdir error", func(t *testing.T) {
 		tmpls := New(nil, nil)
-		tmpls.fileSystem = &mockErrorFS{readdirErr: errors.New("forced readdir error")}
+		// This mock now correctly implements fs.FS
+		mockFS := &mockErrorFS{readdirErr: errors.New("forced readdir error")}
+		// The internal `fileSystem` field is an fs.FS, but getFilePathsInDir takes an http.FileSystem
+		// So we must convert our mock for the test.
+		tmpls.fileSystem = mockFS
 		err := tmpls.ParseTemplates()
 		if err == nil || !strings.Contains(err.Error(), "forced readdir error") {
 			t.Errorf("Expected readdir error, but got: %v", err)

@@ -4,6 +4,8 @@
 test:
 	@echo "Running tests for main module..."
 	go test ./... -coverpkg=./... -coverprofile=coverage-main.out
+	@echo "Running tests for stdlib integration module..."
+	(cd integrations/stdlib && go test -coverprofile=../../coverage-stdlib.out)
 	@echo "Running tests for echo integration module..."
 	(cd integrations/echo && go test -coverprofile=../../coverage-echo.out)
 	@echo "Running tests for chi integration module..."
@@ -13,10 +15,11 @@ test:
 	@echo "Combining coverage reports..."
 	@echo "mode: set" > coverage.out
 	@tail -n +2 coverage-main.out >> coverage.out
+	@tail -n +2 coverage-stdlib.out >> coverage.out
 	@tail -n +2 coverage-echo.out >> coverage.out
 	@tail -n +2 coverage-chi.out >> coverage.out
 	@tail -n +2 coverage-chirender.out >> coverage.out
-	@rm coverage-main.out coverage-echo.out coverage-chi.out coverage-chirender.out
+	@rm coverage-main.out coverage-stdlib.out coverage-echo.out coverage-chi.out coverage-chirender.out
 
 template-contents:
 	find ./files/templates -type f -exec echo "==> {} <==" \; -exec cat {} \; -exec echo \;

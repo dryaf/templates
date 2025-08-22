@@ -2,9 +2,8 @@
 package echo
 
 import (
-	"embed"
-
 	"io"
+	"io/fs"
 
 	"github.com/dryaf/templates"
 	"github.com/google/safehtml/template"
@@ -20,8 +19,8 @@ func (e *echoRenderer) Render(w io.Writer, name string, data interface{}, ctx ec
 	return e.ExecuteTemplate(w, ctx.Request(), name, data)
 }
 
-func NewTemplatesRenderer(fs *embed.FS, fnMap template.FuncMap) echo.Renderer {
-	return &echoRenderer{templates.New(fs, fnMap)}
+func NewTemplatesRenderer(fsys fs.FS, fnMap template.FuncMap) echo.Renderer {
+	return &echoRenderer{templates.New(fsys, fnMap)}
 }
 
 func Renderer(t *templates.Templates) echo.Renderer {

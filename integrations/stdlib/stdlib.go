@@ -2,7 +2,7 @@
 package stdlib
 
 import (
-	"embed"
+	"io/fs"
 	"net/http"
 
 	"github.com/dryaf/templates"
@@ -16,8 +16,8 @@ type Renderer struct {
 
 // NewTemplatesRenderer creates a new Renderer with the given filesystem and function map.
 // It is a convenience wrapper around templates.New.
-func NewTemplatesRenderer(fs *embed.FS, fnMap template.FuncMap) *Renderer {
-	return &Renderer{templates.New(fs, fnMap)}
+func NewTemplatesRenderer(fsys fs.FS, fnMap template.FuncMap) *Renderer {
+	return &Renderer{templates.New(fsys, fnMap)}
 }
 
 // FromTemplates creates a new Renderer from an existing templates.Templates instance.
