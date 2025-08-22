@@ -1,0 +1,8 @@
+{{define "page"}}
+<h1>{{.Title}}</h1>
+<p><em>This page is dynamically rendered based on API data.</em></p>
+
+{{range .Blocks}}
+    {{d_block .TemplateName .Data}}
+{{end}}
+{{end}}

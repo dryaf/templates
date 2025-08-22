@@ -7,29 +7,40 @@
 
 A secure, file-system-based Go template engine built on Google's `safehtml/template`. It provides a familiar structure of layouts, pages, and reusable blocks (partials) while ensuring output is safe from XSS vulnerabilities by default.
 
+## Why this library?
+
+Go's standard `html/template` is good, but Google's `safehtml/template` is better, providing superior, context-aware automatic escaping that offers stronger security guarantees against XSS. However, `safehtml/template` can be complex to set up, especially for projects using a traditional layout/page/partial structure.
+
+This library provides a simple, opinionated framework around `safehtml/template` so you can get the security benefits without the setup overhead.
+
 ## Features
 
 - **Secure by Default**: Built on `safehtml/template` to provide contextual, automatic output escaping.
 - **Layouts, Pages, and Blocks**: Organizes templates into a familiar and powerful structure. Render pages within different layouts, or render blocks individually.
 - **Live Reloading**: Automatically re-parses templates on every request for a seamless development experience.
 - **Production-Ready**: Uses Go's `embed.FS` to compile all templates and assets into a single binary for production deployments.
-- **Dynamic Rendering**: Includes a `d_block` helper to render blocks dynamically by name—perfect for headless CMS integrations where the page structure is defined by an API response.
+- **Dynamic Rendering**: Includes a `d_block` helper to render blocks dynamically by name—perfect for headless CMS integrations.
 - **Convenient Helpers**: Comes with a `locals` function to easily pass key-value data to blocks.
 - **Framework Integrations**: Provides optional, lightweight integration packages for `net/http`, `Echo`, `chi`, and `gin-gonic/gin`.
 
 ## Installation
 
+Add the library to your `go.mod` file:
 ```shell
-
 go get github.com/dryaf/templates
+```
 
+Then import it in your code:
+```go
+import "github.com/dryaf/templates"
 ```
 
 ## Quick Start
 
 1.  **Create your template files:**
 
-    ```    .
+    ```
+    .
     └── files
         └── templates
             ├── layouts
@@ -42,15 +53,10 @@ go get github.com/dryaf/templates
     ```html
     {{define "layout"}}
     <!DOCTYPE html>
-    <html>
-    <head>
-        <title>My App</title>
-    </head>
-    <body>
+    <html><body>
         <h1>Layout</h1>
         {{block "page" .}}{{end}}
-    </body>
-    </html>
+    </body></html>
     {{end}}
     ```
 
@@ -70,7 +76,6 @@ go get github.com/dryaf/templates
     import (
     	"log"
     	"net/http"
-    	"os"
 
     	"github.com/dryaf/templates"
     	"github.com/dryaf/templates/integrations/stdlib"
@@ -98,12 +103,25 @@ go get github.com/dryaf/templates
     }
     ```
 
-3.  **Run it!**
+## Running the Examples
 
-    ```sh
+The project includes a comprehensive set of runnable examples in the `_examples` directory. To run them:
+
+1.  **Set up the template files:** The examples use a shared set of templates. A `Makefile` target is provided to copy them into place. From the project root, run:
+    ```shell
+    make setup-examples
+    ```
+
+2.  **Run an example:** Navigate to any example directory and run it.
+    ```shell
+    cd _examples/chi
     go run .
     ```
-    Visit `http://localhost:8080` and see your rendered template.
+
+3.  **Clean up:** To remove the copied template files, run:
+    ```shell
+    make clean-examples
+    ```
 
 ## Core Concepts
 
@@ -153,7 +171,8 @@ Passing maps as context to blocks can be verbose. The `locals` helper function m
 {{locals "Name" "Bob" "Age" 42 | d_block "_user_card"}}
 ```
 
-`_user_card.gohtml`:```html
+`_user_card.gohtml`:
+```html
 {{define "_user_card"}}
 <div class="card">
     <h3>{{.Name}}</h3>
@@ -212,120 +231,49 @@ http.Handle("/about", renderer.Handler("about", nil))
 
 ### Echo
 
-The `integrations/echo` package provides a renderer and middleware for the [Echo framework](https://echo.labstack.com/).
+The `integrations/echo` package provides a renderer for the [Echo framework](https://echo.labstack.com/).
 
 ```go
-package main
+import "github.com/dryaf/templates/integrations/echo"
+// ...
+e := echo.New()
+e.Renderer = templates_echo.Renderer(tmpls)
 
-import (
-    "embed"
-    "net/http"
-
-    "github.com/dryaf/templates"
-    templates_echo "github.com/dryaf/templates/integrations/echo"
-    "github.com/labstack/echo/v4"
-)
-
-//go:embed files
-var embeddedFiles embed.FS
-
-func main() {
-    // For production, pass the embed.FS to New().
-    // The first argument to templates.New() is the embedded filesystem.
-	tmpls := templates.New(&embeddedFiles, nil)
-	tmpls.MustParseTemplates()
-
-	e := echo.New()
-	e.Renderer = templates_echo.Renderer(tmpls)
-
-	e.GET("/", func(c echo.Context) error {
-		return c.Render(http.StatusOK, "home", "World")
-	})
-	
-	// Example of rendering with a different layout
-	e.GET("/special", func(c echo.Context) error {
-	    return c.Render(http.StatusOK, "special:home", "World")
-	})
-
-	e.Logger.Fatal(e.Start(":1323"))
-}
+e.GET("/", func(c echo.Context) error {
+    return c.Render(http.StatusOK, "home", "World")
+})
 ```
 
 ### Chi
 
-The `integrations/chi` package provides a renderer compatible with the `chi` router, which uses the standard `http.Handler` interface.
+The `integrations/chi` package provides a renderer compatible with the `chi` router.
 
 ```go
-package main
+import "github.com/dryaf/templates/integrations/chi"
+// ...
+renderer := chi.FromTemplates(tmpls)
+r := chi.NewRouter()
 
-import (
-	"log"
-	"net/http"
-
-	"github.com/dryaf/templates"
-	"github.com/dryaf/templates/integrations/chi"
-	"github.com/go-chi/chi/v5"
-)
-
-func main() {
-	tmpls := templates.New(nil, nil)
-	tmpls.AlwaysReloadAndParseTemplates = true // Dev mode
-	tmpls.MustParseTemplates()
-
-	renderer := chi.FromTemplates(tmpls)
-
-	r := chi.NewRouter()
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		err := renderer.Render(w, r, "home", "Chi")
-		if err != nil {
-			log.Println(err)
-			http.Error(w, "Internal Server Error", 500)
-		}
-	})
-
-	log.Println("Starting server on :8080")
-	http.ListenAndServe(":8080", r)
-}
+r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+    renderer.Render(w, r, "home", "Chi")
+})
 ```
 
 ### Chi with go-chi/render
 
-The `integrations/chirender` package provides a custom responder for `go-chi/render` to seamlessly render HTML templates. This allows you to use `render.Respond` for both your HTML pages and your JSON/XML API endpoints.
+The `integrations/chirender` package provides a custom responder for `go-chi/render` to seamlessly render HTML templates alongside JSON/XML API endpoints.
 
 ```go
-package main
+import "github.com/dryaf/templates/integrations/chirender"
+import "github.com/go-chi/render"
+// ...
+// Set the custom HTML responder once at startup
+render.Respond = chirender.HTML
 
-import (
-	"log"
-	"net/http"
-
-	"github.com/dryaf/templates"
-	"github.com/dryaf/templates/integrations/chirender"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/render"
-)
-
-func main() {
-	// Set the custom HTML responder once at startup
-	render.Respond = chirender.HTML
-
-	tmpls := templates.New(nil, nil)
-	tmpls.AlwaysReloadAndParseTemplates = true // Dev mode
-	tmpls.MustParseTemplates()
-
-	r := chi.NewRouter()
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		// Use render.Respond to render the template
-		render.Respond(w, r, chirender.New(tmpls, "home", "Chi with Render"))
-	})
-	r.Get("/api", func(w http.ResponseWriter, r *http.Request) {
-		// The same render.Respond falls back to JSON for other types
-		render.Respond(w, r, render.M{"status": "ok"})
-	})
-
-	log.Println("Starting server on :8080")
-	http.ListenAndServe(":8080", r)
-}
+r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+    // render.Respond can now render your templates
+    render.Respond(w, r, chirender.New(tmpls, "home", "Chi with Render"))
+})
 ```
 
 ### Gin
@@ -333,40 +281,19 @@ func main() {
 The `integrations/gin` package provides a renderer that implements `gin.HTMLRender` for the [Gin framework](https://gin-gonic.com/).
 
 ```go
-package main
+import "github.com/dryaf/templates/integrations/gin"
+// ...
+router := gin.Default()
+router.HTMLRender = templates_gin.New(tmpls)
 
-import (
-	"net/http"
-
-	"github.com/dryaf/templates"
-	templates_gin "github.com/dryaf/templates/integrations/gin"
-	"github.com/gin-gonic/gin"
-)
-
-func main() {
-	tmpls := templates.New(nil, nil)
-	tmpls.MustParseTemplates()
-
-	router := gin.Default()
-	router.HTMLRender = templates_gin.New(tmpls)
-
-	router.GET("/", func(c *gin.Context) {
-		// c.HTML renders the template with the default layout
-		c.HTML(http.StatusOK, "home", "Gin")
-	})
-
-	router.GET("/special", func(c *gin.Context) {
-		// You can specify a layout just like with other integrations
-		c.HTML(http.StatusOK, "special:home", "Gin with a special layout")
-	})
-
-	router.Run(":8080")
-}
-```
+router.GET("/", func(c *gin.Context) {
+    c.HTML(http.StatusOK, "home", "Gin")
+})```
 
 ## Roadmap
 
--   [ ] ...
+-   [ ] Implement SSE for Hotwired Turbo Streams.
+-   [ ] Add tests for Hotwired Turbo integration.
 
 ## License
 

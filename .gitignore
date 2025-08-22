@@ -4,3 +4,10 @@ _prompt_ignore.txt
 _prompt.txt
 coverage.out
 _prompt_remote_files.txt
+_examples/chi/files
+_examples/chirender/files
+_examples/echo/files
+_examples/gin/files
+_examples/stdlib/files
+vendor/
+.cache

@@ -1,0 +1,8 @@
+{{define "_trusted_content"}}
+<div class="card">
+    <h3>Trusted Content Block</h3>
+    <p>This content is from a 'trusted' source and rendered without escaping:</p>
+    <hr>
+    {{trusted_html .}}
+</div>
+{{end}}

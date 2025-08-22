@@ -1,0 +1,20 @@
+{{define "page"}}
+<h1>Welcome to the Showcase</h1>
+<p>
+    This is the home page. It is rendered with the <b>default layout</b>.
+</p>
+<p>
+    The data passed to this page is: <code>{{.}}</code>
+</p>
+<hr>
+<h3>Security Demonstration</h3>
+<p>
+    The template engine uses <code>safehtml/template</code>, so it automatically escapes content.
+</p>
+<p>
+    <b>Escaped by default:</b> {{.UnsafeHTML}}
+</p>
+<p>
+    <b>Explicitly trusted:</b> {{trusted_html .SafeHTML}}
+</p>
+{{end}}

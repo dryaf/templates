@@ -92,21 +92,19 @@ type Templates struct {
 //   - fsys: The filesystem containing the templates. Due to security constraints
 //     in `safehtml/template`, this must be either an `*embed.FS` (for production)
 //     or `nil` to use the local operating system filesystem (for development).
-//     Providing any other type will cause a panic. The engine expects templates
-//     to be in a `files/templates` subdirectory within this filesystem.
+//     Providing any other type will cause a panic.
 //   - fnMap: A `template.FuncMap` containing custom functions to make available
 //     within templates. Can be nil if no custom functions are needed.
 //
 // Returns a new, configured *Templates instance.
 func New(fsys fs.FS, fnMap template.FuncMap) *Templates {
-
 	var trustedFileSystem template.TrustedFS
 	var fileSystemForParsing fs.FS
 	isEmbed := false
 
 	switch v := fsys.(type) {
 	case nil:
-		// Default to OS filesystem.
+		// Default to OS filesystem, chrooted to the templates path.
 		fileSystemForParsing = os.DirFS(templatesPath)
 		trustedFileSystem = template.TrustedFSFromTrustedSource(template.TrustedSourceFromConstant(templatesPath))
 	case *embed.FS:
@@ -222,7 +220,7 @@ func (t *Templates) ParseTemplates() error {
 		}
 
 		prefixedBlockName := blockName
-		if blockName[:1] != "_" {
+		if !strings.HasPrefix(blockName, "_") {
 			prefixedBlockName = "_" + blockName
 		}
 
@@ -280,7 +278,7 @@ func (t *Templates) ExecuteTemplate(w io.Writer, r *http.Request, templateName s
 	}
 
 	// block/snippet/partial
-	if templateName[:1] == "_" {
+	if strings.HasPrefix(templateName, "_") {
 		tmpl, ok := t.templates[templateName]
 		if !ok {
 			return errors.New("template: name not found ->" + templateName)
@@ -288,7 +286,7 @@ func (t *Templates) ExecuteTemplate(w io.Writer, r *http.Request, templateName s
 		return tmpl.ExecuteTemplate(w, templateName, data) // block has template name defined, so only render that
 	}
 	// page only
-	if templateName[:1] == ":" {
+	if strings.HasPrefix(templateName, ":") {
 		tmpl, ok := t.templates[templateName]
 		if !ok {
 			return errors.New("template: name not found ->" + templateName)
@@ -329,7 +327,7 @@ func (t *Templates) ExecuteTemplate(w io.Writer, r *http.Request, templateName s
 // This is useful for rendering partials inside other logic. The block name must
 // start with an underscore "_".
 func (t *Templates) RenderBlockAsHTMLString(blockname string, payload interface{}) (safehtml.HTML, error) {
-	if blockname[:1] != "_" {
+	if !strings.HasPrefix(blockname, "_") {
 		return safehtml.HTML{}, errors.New("blockname needs to start with _")
 	}
 	if len(blockname) > 255 {
@@ -511,18 +509,16 @@ func (t *Templates) fatalOnErr(err error) {
 }
 
 func getFilePathsInDir(fs http.FileSystem, dirPath string, prefixTemplatesPath bool) ([]string, error) {
-
 	dirPath = cleanPath(dirPath)
 	dir, err := fs.Open(dirPath)
 	if err != nil {
 		return nil, fmt.Errorf("getFilePathsInDir fs.Open: %w", err)
-
 	}
 	fileInfos, err := dir.Readdir(-1)
 	if err != nil {
 		return nil, fmt.Errorf("getFilePathsInDir Readdir: %w", err)
 	}
-	files := []string{}
+	var files []string
 	for _, fileInfo := range fileInfos {
 		if path.Ext(fileInfo.Name()) == fileExtension {
 			if prefixTemplatesPath {
@@ -550,19 +546,12 @@ func parseNewTemplateWithFuncMap(layout string, fnMap template.FuncMap, fs templ
 }
 
 // cleanPath returns the canonical path for p, eliminating . and .. elements.
-// taken from https://golang.org/src/net/http/server.go?s=68684:68715#L2203
 func cleanPath(p string) string {
 	if p == "" {
 		return "/"
 	}
-	// if p[0] != '/' {
-	// 	p = "/" + p
-	// }
 	np := path.Clean(p)
-	// path.Clean removes trailing slash except for root;
-	// put the trailing slash back if necessary.
 	if p[len(p)-1] == '/' && np != "/" {
-		// Fast path for common case of p being the string we want:
 		if len(p) == len(np)+1 && strings.HasPrefix(p, np) {
 			np = p
 		} else {

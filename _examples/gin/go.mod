@@ -1,10 +1,11 @@
-// ==== File: integrations/gin/go.mod ====
-module github.com/dryaf/templates/integrations/gin
+// ==== File: _examples/gin/go.mod ====
+module github.com/dryaf/templates/_examples/gin
 
 go 1.24
 
 require (
 	github.com/dryaf/templates v0.1.2
+	github.com/dryaf/templates/integrations/gin v0.0.0-20250822202312-10d769eb3fb3
 	github.com/gin-gonic/gin v1.10.1
 )
 

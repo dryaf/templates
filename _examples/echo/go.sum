@@ -1,5 +1,7 @@
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/dryaf/templates/integrations/echo v0.0.0-20250822202312-10d769eb3fb3 h1:tBdReTOtUXkw3aEmTQ7sRK3nJRS9PgSGF6xn/Ve9ZCw=
+github.com/dryaf/templates/integrations/echo v0.0.0-20250822202312-10d769eb3fb3/go.mod h1:ImJcX7GYYET8qq9U4yi5KsH6EtSaHKTPIJ3qZdpt5xc=
 github.com/google/safehtml v0.1.1-0.20250618200626-e177c9cd28ca h1:aL2qeu+iCHfixWpOTL4Utl5OiuJTwBdmZgSuNe2HpSY=
 github.com/google/safehtml v0.1.1-0.20250618200626-e177c9cd28ca/go.mod h1:ses04bNFagkcb3YeHX2ozsdZyOU/Rh6mqMtwiEoLkmQ=
 github.com/labstack/echo/v4 v4.13.4 h1:oTZZW+T3s9gAu5L8vmzihV7/lkXGZuITzTQkTEhcXEA=

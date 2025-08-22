@@ -1,5 +1,5 @@
-github.com/go-chi/chi/v5 v5.2.2 h1:CMwsvRVTbXVytCk1Wd72Zy1LAsAh9GxMmSNWLHCG618=
-github.com/go-chi/chi/v5 v5.2.2/go.mod h1:L2yAIGWB3H+phAw1NxKwWM+7eUH/lU8pOMm5hHcoops=
+github.com/dryaf/templates/integrations/stdlib v0.0.0-20250822202312-10d769eb3fb3 h1:RoUyYkzcEVsKhQ8J0eqqTS/yzt/g0c9xL9IRxYJOmfw=
+github.com/dryaf/templates/integrations/stdlib v0.0.0-20250822202312-10d769eb3fb3/go.mod h1:Bg7qZgvWmosgakiPIfxHYYcLaBFWdD1FBo4vpeK3sag=
 github.com/google/safehtml v0.1.1-0.20250618200626-e177c9cd28ca h1:aL2qeu+iCHfixWpOTL4Utl5OiuJTwBdmZgSuNe2HpSY=
 github.com/google/safehtml v0.1.1-0.20250618200626-e177c9cd28ca/go.mod h1:ses04bNFagkcb3YeHX2ozsdZyOU/Rh6mqMtwiEoLkmQ=
 golang.org/x/text v0.3.3/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
