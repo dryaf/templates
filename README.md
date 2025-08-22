@@ -288,12 +288,12 @@ router.HTMLRender = templates_gin.New(tmpls)
 
 router.GET("/", func(c *gin.Context) {
     c.HTML(http.StatusOK, "home", "Gin")
-})```
+})
+```
 
 ## Roadmap
 
--   [ ] Implement SSE for Hotwired Turbo Streams.
--   [ ] Add tests for Hotwired Turbo integration.
+-   [ ] ideas for next version?
 
 ## License
 
