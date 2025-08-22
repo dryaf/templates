@@ -1,4 +1,3 @@
-// ==== File: Makefile ====
 .PHONY: test coverage-svg template-contents setup-examples clean-examples deps-update
 
 test:
@@ -19,7 +18,7 @@ test:
 	@tail -n +2 coverage-echo.out >> coverage.out
 	@tail -n +2 coverage-chi.out >> coverage.out
 	@tail -n +2 coverage-gin.out >> coverage.out
-	@rm coverage-main.out coverage-stdlib.out coverage-echo.out coverage-chi.out coverage-chirender.out coverage-gin.out
+	@rm coverage-main.out coverage-stdlib.out coverage-echo.out coverage-chi.out coverage-gin.out
 
 template-contents:
 	find ./files/templates -type f -exec echo "==> {} <==" \; -exec cat {} \; -exec echo \;
@@ -31,7 +30,7 @@ coverage-svg: test
 	echo "$$svg_content" > coverage.svg
 
 # Define the example directories
-EXAMPLE_DIRS := _examples/stdlib _examples/chi _examples/chirender _examples/echo _examples/gin
+EXAMPLE_DIRS := _examples/stdlib _examples/chi _examples/echo _examples/gin
 
 # Target to set up copied files for all examples
 setup-examples:

@@ -27,8 +27,7 @@ This library provides a simple, opinionated framework around `safehtml/template`
 
 Add the library to your `go.mod` file:
 ```shell
-go get github.com/dryaf/templates
-```
+go get github.com/dryaf/templates```
 
 Then import it in your code:
 ```go
@@ -91,7 +90,7 @@ import "github.com/dryaf/templates"
     	renderer := stdlib.FromTemplates(tmpls)
 
     	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-    		err := renderer.Render(w, r, "home", "World")
+    		err := renderer.Render(w, r, http.StatusOK, "home", "World")
     		if err != nil {
     			log.Println(err)
     			http.Error(w, "Internal Server Error", 500)
@@ -222,7 +221,7 @@ renderer := stdlib.FromTemplates(tmpls)
 
 // Use it in an http.HandlerFunc
 http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-    renderer.Render(w, r, "home", "Data")
+    renderer.Render(w, r, http.StatusOK, "home", "Data")
 })
 
 // Or create a handler that always renders the same template
@@ -255,7 +254,7 @@ renderer := chi.FromTemplates(tmpls)
 r := chi.NewRouter()
 
 r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-    renderer.Render(w, r, "home", "Chi")
+    renderer.Render(w, r, http.StatusOK, "home", "Chi")
 })
 ```
 
@@ -276,7 +275,12 @@ router.GET("/", func(c *gin.Context) {
 
 ## Roadmap
 
--   [ ] ideas for next version?
+The library is considered feature-complete and stable for a v1.0.0 release. Future development will be driven by community feedback and integration requests for new frameworks. Potential ideas include:
+
+-   Additional template helper functions.
+-   Performance optimizations.
+
+Feel free to open an issue to suggest features or improvements.
 
 ## License
 
