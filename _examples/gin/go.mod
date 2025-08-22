@@ -4,8 +4,8 @@ module github.com/dryaf/templates/_examples/gin
 go 1.24
 
 require (
-	github.com/dryaf/templates v0.1.2
-	github.com/dryaf/templates/integrations/gin v0.0.0-20250822221651-2b72f52fe807
+	github.com/dryaf/templates v1.0.3
+	github.com/dryaf/templates/integrations/gin v0.0.0-20250822233211-d72f50e7b22c
 	github.com/gin-gonic/gin v1.10.1
 )
 

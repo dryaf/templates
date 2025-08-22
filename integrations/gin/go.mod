@@ -4,7 +4,7 @@ module github.com/dryaf/templates/integrations/gin
 go 1.24
 
 require (
-	github.com/dryaf/templates v1.0.2
+	github.com/dryaf/templates v1.0.3
 	github.com/gin-gonic/gin v1.10.1
 )
 
