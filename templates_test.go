@@ -1,3 +1,4 @@
+// ==== File: templates_test.go ====
 package templates
 
 import (
@@ -317,9 +318,8 @@ func TestRendering(t *testing.T) {
 
 			t.Run("Handlers_Error", func(t *testing.T) {
 				logBuf := new(bytes.Buffer)
-				originalLogger := slog.Default()
-				slog.SetDefault(slog.New(slog.NewTextHandler(logBuf, &slog.HandlerOptions{})))
-				defer slog.SetDefault(originalLogger)
+				tmpls := setup.setup(t)
+				tmpls.Logger = slog.New(slog.NewTextHandler(logBuf, &slog.HandlerOptions{}))
 
 				t.Run("HandlerRenderWithData", func(t *testing.T) {
 					logBuf.Reset()

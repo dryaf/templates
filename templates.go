@@ -46,6 +46,8 @@ type Templates struct {
 
 	AddHeadlessCMSFuncMapHelpers bool
 
+	Logger *slog.Logger
+
 	funcMap template.FuncMap
 
 	fileSystem        fs.FS
@@ -81,6 +83,7 @@ func New(efs *embed.FS, fnMap template.FuncMap) *Templates {
 		BlocksPath:            blocksPath,
 
 		AddHeadlessCMSFuncMapHelpers: true, // d_block, trust_html
+		Logger:                       slog.Default(),
 		funcMap:                      fnMap,
 
 		fileSystem:        fileSystem,
@@ -106,7 +109,7 @@ func (t *Templates) AddFuncMapHelpers() {
 
 // MustParseTemplates goes fatal if there is an error
 func (t *Templates) MustParseTemplates() {
-	fatalOnErr(t.ParseTemplates())
+	t.fatalOnErr(t.ParseTemplates())
 }
 
 // ParseTemplates reads all html files and freshly compiles the templates
@@ -279,7 +282,7 @@ func (t *Templates) RenderBlockAsHTMLString(blockname string, payload interface{
 func (t *Templates) AddDynamicBlockToFuncMap() {
 	_, ok := t.funcMap["d_block"]
 	if ok {
-		slog.Error("function name is already in use in FuncMap", "name", "d_block")
+		t.Logger.Error("function name is already in use in FuncMap", "name", "d_block")
 		os.Exit(1)
 	}
 	t.funcMap["d_block"] = t.RenderBlockAsHTMLString
@@ -288,7 +291,7 @@ func (t *Templates) AddDynamicBlockToFuncMap() {
 func (t *Templates) addTrustedConverterFuncs() {
 	add := func(name string, f any) {
 		if _, ok := t.funcMap[name]; ok {
-			slog.Error("function name is already in use in FuncMap", "name", name)
+			t.Logger.Error("function name is already in use in FuncMap", "name", name)
 			os.Exit(1)
 		}
 		t.funcMap[name] = f
@@ -306,7 +309,7 @@ func (t *Templates) addTrustedConverterFuncs() {
 func (t *Templates) AddLocalsToFuncMap() {
 	_, ok := t.funcMap["locals"]
 	if ok {
-		slog.Error("function name is already in use in FuncMap", "name", "locals")
+		t.Logger.Error("function name is already in use in FuncMap", "name", "locals")
 		os.Exit(1)
 	}
 	t.funcMap["locals"] = Locals
@@ -317,7 +320,7 @@ func (t *Templates) HandlerRenderWithData(templateName string, data interface{})
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := t.ExecuteTemplate(w, r, templateName, data)
 		if err != nil {
-			slog.Error("failed to execute template", "error", err, "template_name", templateName)
+			t.Logger.Error("failed to execute template", "error", err, "template_name", templateName)
 		}
 	}
 }
@@ -327,7 +330,7 @@ func (t *Templates) HandlerRenderWithDataFromContext(templateName string, contex
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := t.ExecuteTemplate(w, r, templateName, r.Context().Value(contextKey))
 		if err != nil {
-			slog.Error("failed to execute template", "error", err, "template_name", templateName)
+			t.Logger.Error("failed to execute template", "error", err, "template_name", templateName)
 		}
 	}
 }
@@ -415,9 +418,9 @@ func Locals(args ...any) map[string]any {
 	return m
 }
 
-func fatalOnErr(err error) {
+func (t *Templates) fatalOnErr(err error) {
 	if err != nil {
-		slog.Error("fatal error during setup", "error", err)
+		t.Logger.Error("fatal error during setup", "error", err)
 		os.Exit(1)
 	}
 }

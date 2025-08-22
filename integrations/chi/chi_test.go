@@ -199,8 +199,7 @@ func TestRenderer_Handler(t *testing.T) {
 func TestRenderer_Handler_Error(t *testing.T) {
 	renderer := setup(t)
 	var logBuf bytes.Buffer
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
-	defer slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	renderer.Templates.Logger = slog.New(slog.NewTextHandler(&logBuf, nil))
 
 	handler := renderer.Handler("nonexistent", nil)
 	req := httptest.NewRequest(http.MethodGet, "/person", nil)
@@ -248,10 +247,8 @@ func TestRenderer_HandlerWithDataFromContext(t *testing.T) {
 
 func TestRenderer_HandlerWithDataFromContext_Error(t *testing.T) {
 	renderer := setup(t)
-
 	var logBuf bytes.Buffer
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
-	defer slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	renderer.Templates.Logger = slog.New(slog.NewTextHandler(&logBuf, nil))
 
 	type contextKey string
 	const personKey contextKey = "person"
