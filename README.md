@@ -15,7 +15,7 @@ A secure, file-system-based Go template engine built on Google's `safehtml/templ
 - **Production-Ready**: Uses Go's `embed.FS` to compile all templates and assets into a single binary for production deployments.
 - **Dynamic Rendering**: Includes a `d_block` helper to render blocks dynamically by name—perfect for headless CMS integrations where the page structure is defined by an API response.
 - **Convenient Helpers**: Comes with a `locals` function to easily pass key-value data to blocks.
-- **Framework Integrations**: Provides optional, lightweight integration packages for `net/http` and `Echo`.
+- **Framework Integrations**: Provides optional, lightweight integration packages for `net/http`, `Echo`, and `chi`.
 
 ## Installation
 
@@ -29,8 +29,7 @@ go get github.com/dryaf/templates
 
 1.  **Create your template files:**
 
-    ```
-    .
+    ```    .
     └── files
         └── templates
             ├── layouts
@@ -255,8 +254,7 @@ func main() {
 
 ### Chi
 
-The integrations/chi package provides a renderer compatible with the chi router, which uses the standard http.Handler interface.
-code
+The `integrations/chi` package provides a renderer compatible with the `chi` router, which uses the standard `http.Handler` interface.
 
 ```go
 package main
@@ -284,6 +282,46 @@ func main() {
 			log.Println(err)
 			http.Error(w, "Internal Server Error", 500)
 		}
+	})
+
+	log.Println("Starting server on :8080")
+	http.ListenAndServe(":8080", r)
+}
+```
+
+### Chi with go-chi/render
+
+The `integrations/chirender` package provides a custom responder for `go-chi/render` to seamlessly render HTML templates. This allows you to use `render.Respond` for both your HTML pages and your JSON/XML API endpoints.
+
+```go
+package main
+
+import (
+	"log"
+	"net/http"
+
+	"github.com/dryaf/templates"
+	"github.com/dryaf/templates/integrations/chirender"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/render"
+)
+
+func main() {
+	// Set the custom HTML responder once at startup
+	render.Respond = chirender.HTML
+
+	tmpls := templates.New(nil, nil)
+	tmpls.AlwaysReloadAndParseTemplates = true // Dev mode
+	tmpls.MustParseTemplates()
+
+	r := chi.NewRouter()
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		// Use render.Respond to render the template
+		render.Respond(w, r, chirender.New(tmpls, "home", "Chi with Render"))
+	})
+	r.Get("/api", func(w http.ResponseWriter, r *http.Request) {
+		// The same render.Respond falls back to JSON for other types
+		render.Respond(w, r, render.M{"status": "ok"})
 	})
 
 	log.Println("Starting server on :8080")

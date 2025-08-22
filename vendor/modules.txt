@@ -1,9 +1,17 @@
 ## workspace
-# github.com/dryaf/templates v0.1.1
+# github.com/ajg/form v1.5.1
+## explicit
+github.com/ajg/form
+# github.com/dryaf/templates v0.1.1 => .
+## explicit; go 1.24
+# github.com/dryaf/templates v0.1.2 => .
 ## explicit; go 1.24
 # github.com/go-chi/chi/v5 v5.2.2
 ## explicit; go 1.20
 github.com/go-chi/chi/v5
+# github.com/go-chi/render v1.0.3
+## explicit; go 1.16
+github.com/go-chi/render
 # github.com/golang-jwt/jwt v3.2.2+incompatible
 ## explicit
 # github.com/google/safehtml v0.1.1-0.20250618200626-e177c9cd28ca

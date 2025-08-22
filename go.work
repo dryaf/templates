@@ -6,5 +6,6 @@ toolchain go1.24.5
 use (
 	.
 	./integrations/chi
+	./integrations/chirender
 	./integrations/echo
 )

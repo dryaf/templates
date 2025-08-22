@@ -8,12 +8,15 @@ test:
 	(cd integrations/echo && go test -coverprofile=../../coverage-echo.out)
 	@echo "Running tests for chi integration module..."
 	(cd integrations/chi && go test -coverprofile=../../coverage-chi.out)
+	@echo "Running tests for chi-render integration module..."
+	(cd integrations/chirender && go test -coverprofile=../../coverage-chirender.out)
 	@echo "Combining coverage reports..."
 	@echo "mode: set" > coverage.out
 	@tail -n +2 coverage-main.out >> coverage.out
 	@tail -n +2 coverage-echo.out >> coverage.out
 	@tail -n +2 coverage-chi.out >> coverage.out
-	@rm coverage-main.out coverage-echo.out coverage-chi.out
+	@tail -n +2 coverage-chirender.out >> coverage.out
+	@rm coverage-main.out coverage-echo.out coverage-chi.out coverage-chirender.out
 
 template-contents:
 	find ./files/templates -type f -exec echo "==> {} <==" \; -exec cat {} \; -exec echo \;
