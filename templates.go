@@ -1,4 +1,7 @@
 // ==== File: templates.go ====
+// Package templates provides a secure, file-system-based Go template engine
+// built on Google's safehtml/template library. It organizes templates into
+// layouts, pages, and reusable blocks, ensuring XSS safety by default.
 package templates
 
 import (
@@ -22,7 +25,9 @@ import (
 	"github.com/google/safehtml/uncheckedconversions"
 )
 
-// LayoutContextKey is the key for getting the layout string out of the context
+// LayoutContextKey is the key used to store and retrieve the desired layout name
+// from a request's context. A middleware can set this value to dynamically
+// change the layout for a request.
 type LayoutContextKey struct{}
 
 const templatesPath = "files/templates"
@@ -31,19 +36,44 @@ const pagesPath = "pages"
 const blocksPath = "blocks"
 const fileExtension = ".gohtml"
 
+// Templates is the core engine for managing, parsing, and executing templates.
+// It holds the parsed templates, configuration, and the underlying filesystem.
 type Templates struct {
+	// If true, templates will be re-parsed on every ExecuteTemplate call.
+	// This is highly recommended for development to see changes without restarting
+	// the application, but should be disabled in production for performance.
 	AlwaysReloadAndParseTemplates bool
 
-	DefaultLayout         string
+	// The name of the default layout file (without extension) to use when a
+	// layout is not explicitly specified in the template name.
+	// Defaults to "application".
+	DefaultLayout string
+
+	// The file extension for template files. Defaults to ".gohtml".
 	TemplateFileExtension string
 
+	// The trusted source path for templates, used by the underlying safehtml/template
+	// library for security checks.
 	TemplatesPath template.TrustedSource
-	LayoutsPath   string
-	PagesPath     string
-	BlocksPath    string
 
+	// The subdirectory within the templates path for layout files.
+	// Defaults to "layouts".
+	LayoutsPath string
+
+	// The subdirectory within the templates path for page files.
+	// Defaults to "pages".
+	PagesPath string
+
+	// The subdirectory within the templates path for reusable block files.
+	// Defaults to "blocks".
+	BlocksPath string
+
+	// If true, automatically adds helper functions like `d_block`, `locals`,
+	// and `trusted_*` to the template function map. Defaults to true.
 	AddHeadlessCMSFuncMapHelpers bool
 
+	// The logger to use for internal errors and debug messages.
+	// Defaults to slog.Default().
 	Logger *slog.Logger
 
 	funcMap template.FuncMap
@@ -56,14 +86,18 @@ type Templates struct {
 	templatesLock sync.RWMutex
 }
 
-// New creates a new Templates instance from a filesystem.
-// The `fsys` parameter should be the filesystem containing the templates, typically rooted at the project directory.
+// New creates a new Templates instance from a filesystem and a custom function map.
 //
-// - If `fsys` is `nil`, it defaults to the operating system's file system.
-// - If `fsys` is an `*embed.FS`, it will be used for production builds.
+// Parameters:
+//   - fsys: The filesystem containing the templates. Due to security constraints
+//     in `safehtml/template`, this must be either an `*embed.FS` (for production)
+//     or `nil` to use the local operating system filesystem (for development).
+//     Providing any other type will cause a panic. The engine expects templates
+//     to be in a `files/templates` subdirectory within this filesystem.
+//   - fnMap: A `template.FuncMap` containing custom functions to make available
+//     within templates. Can be nil if no custom functions are needed.
 //
-// Due to security constraints in the underlying `safehtml/template` library, only `*embed.FS` and `nil` (OS filesystem) are supported.
-// Providing any other `fs.FS` implementation will cause a panic.
+// Returns a new, configured *Templates instance.
 func New(fsys fs.FS, fnMap template.FuncMap) *Templates {
 
 	var trustedFileSystem template.TrustedFS
@@ -109,6 +143,9 @@ func New(fsys fs.FS, fnMap template.FuncMap) *Templates {
 	return t
 }
 
+// AddFuncMapHelpers populates the template function map with the default helpers
+// if `AddHeadlessCMSFuncMapHelpers` is true. It will panic if a function name
+// is already in use.
 func (t *Templates) AddFuncMapHelpers() {
 	if t.funcMap == nil {
 		t.funcMap = template.FuncMap{}
@@ -120,12 +157,16 @@ func (t *Templates) AddFuncMapHelpers() {
 	}
 }
 
-// MustParseTemplates goes fatal if there is an error
+// MustParseTemplates parses all template files from the configured filesystem.
+// It will panic if any error occurs during parsing, making it suitable for
+// application initialization.
 func (t *Templates) MustParseTemplates() {
 	t.fatalOnErr(t.ParseTemplates())
 }
 
-// ParseTemplates reads all html files and freshly compiles the templates
+// ParseTemplates reads and parses all template files from the configured layouts,
+// pages, and blocks directories. It populates the internal template map.
+// This method is safe for concurrent use.
 func (t *Templates) ParseTemplates() error {
 	t.templates = make(map[string]*template.Template)
 	hfs := http.FS(t.fileSystem)
@@ -206,7 +247,20 @@ func definedTemplatesContain(t *template.Template, name string) bool {
 	return false
 }
 
-// ExecuteTemplate renders the template specified by name (layout:page or just page)
+// ExecuteTemplate renders a template by name to the given writer.
+//
+// The `templateName` parameter supports several syntaxes:
+//   - "page_name": Renders the page within the default layout (or a layout from context).
+//   - "layout_name:page_name": Renders the page within a specific layout.
+//   - ":page_name": Renders the page without any layout.
+//   - "_block_name": Renders a specific block by itself.
+//
+// Parameters:
+//   - w: The io.Writer to write the output to (e.g., an http.ResponseWriter).
+//   - r: The *http.Request for the current request. Can be nil, but if provided,
+//     the engine will check its context for a LayoutContextKey to override the layout.
+//   - templateName: The name of the template to execute.
+//   - data: The data to pass to the template.
 func (t *Templates) ExecuteTemplate(w io.Writer, r *http.Request, templateName string, data interface{}) error {
 	// dev mode for example
 	if t.AlwaysReloadAndParseTemplates {
@@ -271,7 +325,9 @@ func (t *Templates) ExecuteTemplate(w io.Writer, r *http.Request, templateName s
 	return tmpl.ExecuteTemplate(w, "layout", data)
 }
 
-// RenderBlockAsHTMLString renders a template from the templates-map as a HTML-String
+// RenderBlockAsHTMLString renders a specific block to a safehtml.HTML string.
+// This is useful for rendering partials inside other logic. The block name must
+// start with an underscore "_".
 func (t *Templates) RenderBlockAsHTMLString(blockname string, payload interface{}) (safehtml.HTML, error) {
 	if blockname[:1] != "_" {
 		return safehtml.HTML{}, errors.New("blockname needs to start with _")
@@ -289,9 +345,11 @@ func (t *Templates) RenderBlockAsHTMLString(blockname string, payload interface{
 	return uncheckedconversions.HTMLFromStringKnownToSatisfyTypeContract(b.String()), err
 }
 
-// AddDynamicBlockToFuncMap adds 'd_block' to the FuncMap which allows to render blocks from variables dynamically set
-// Rob doesn't like, we add it anyway because we like headless cms
-// https://stackoverflow.com/questions/28830543/how-to-use-a-field-of-struct-or-variable-value-as-template-name
+// AddDynamicBlockToFuncMap adds the 'd_block' function to the FuncMap. This
+// powerful helper allows templates to render blocks dynamically by name, which
+// is ideal for pages whose structure is determined by an API response (e.g.,
+// from a headless CMS).
+// Usage in template: `{{ d_block "block_name_from_variable" .Data }}`
 func (t *Templates) AddDynamicBlockToFuncMap() {
 	_, ok := t.funcMap["d_block"]
 	if ok {
@@ -301,6 +359,10 @@ func (t *Templates) AddDynamicBlockToFuncMap() {
 	t.funcMap["d_block"] = t.RenderBlockAsHTMLString
 }
 
+// addTrustedConverterFuncs adds the 'trusted_*' functions to the FuncMap.
+// These functions wrap strings in the appropriate `safehtml` types, preventing
+// them from being escaped. Use these only when you are certain the content is
+// from a trusted source and is safe to render verbatim.
 func (t *Templates) addTrustedConverterFuncs() {
 	add := func(name string, f any) {
 		if _, ok := t.funcMap[name]; ok {
@@ -319,6 +381,10 @@ func (t *Templates) addTrustedConverterFuncs() {
 	add("trusted_identifier", trustedIdentifier)
 }
 
+// AddLocalsToFuncMap adds the 'locals' function to the FuncMap. This helper
+// provides a convenient way to create a `map[string]any` inside a template,
+// which is useful for passing structured data to blocks.
+// Usage: `{{ block "_myblock" (locals "key1" "value1" "key2" 2) }}`
 func (t *Templates) AddLocalsToFuncMap() {
 	_, ok := t.funcMap["locals"]
 	if ok {
@@ -328,7 +394,8 @@ func (t *Templates) AddLocalsToFuncMap() {
 	t.funcMap["locals"] = Locals
 }
 
-// HandlerRenderWithData returns a Handler function which only renders the template
+// HandlerRenderWithData returns a http.HandlerFunc that renders a template with
+// the provided static data.
 func (t *Templates) HandlerRenderWithData(templateName string, data interface{}) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := t.ExecuteTemplate(w, r, templateName, data)
@@ -338,7 +405,8 @@ func (t *Templates) HandlerRenderWithData(templateName string, data interface{})
 	}
 }
 
-// HandlerRenderWithDataFromContext returns a Handler function which only renders the template and uses data from context
+// HandlerRenderWithDataFromContext returns a http.HandlerFunc that renders a
+// template, taking its data from the request's context via the provided context key.
 func (t *Templates) HandlerRenderWithDataFromContext(templateName string, contextKey interface{}) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := t.ExecuteTemplate(w, r, templateName, r.Context().Value(contextKey))
@@ -348,8 +416,8 @@ func (t *Templates) HandlerRenderWithDataFromContext(templateName string, contex
 	}
 }
 
-// For Testing
-
+// GetParsedTemplates returns a sorted slice of the names of all parsed templates.
+// This is primarily intended for debugging and testing purposes.
 func (t *Templates) GetParsedTemplates() []string {
 	keys := make([]string, 0, len(t.templates))
 
@@ -360,6 +428,7 @@ func (t *Templates) GetParsedTemplates() []string {
 	return keys
 }
 
+// ExecuteTemplateAsText is a testing helper that renders a template to a string.
 func (t *Templates) ExecuteTemplateAsText(r *http.Request, templateName string, data interface{}) (string, error) {
 	b := &bytes.Buffer{}
 	err := t.ExecuteTemplate(b, r, templateName, data)
@@ -418,6 +487,9 @@ func trustedIdentifier(id any) safehtml.Identifier {
 	return uncheckedconversions.IdentifierFromStringKnownToSatisfyTypeContract(fmt.Sprint(id))
 }
 
+// Locals is a template helper function that creates a map[string]any from a
+// sequence of key-value pairs. This is useful for passing named arguments to templates.
+// The arguments must be in pairs, e.g., `locals "key1", "value1", "key2", 2`.
 func Locals(args ...any) map[string]any {
 	m := map[string]any{}
 	var key any

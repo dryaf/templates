@@ -9,17 +9,19 @@ import (
 	"github.com/gin-gonic/gin/render"
 )
 
-// Renderer implements the gin.HTMLRenderer interface.
+// Renderer implements the gin.HTMLRenderer interface, allowing the templates
+// engine to be used as the default HTML renderer in Gin.
 type Renderer struct {
 	*templates.Templates
 }
 
-// New creates a new Renderer instance for Gin.
+// New creates a new Renderer instance for Gin from a configured templates.Templates instance.
 func New(tmpls *templates.Templates) *Renderer {
 	return &Renderer{Templates: tmpls}
 }
 
 // Instance returns a gin.HTMLRender instance for a given template name and data.
+// It is called by c.HTML() in a Gin handler.
 func (r *Renderer) Instance(name string, data interface{}) render.Render {
 	return &instance{
 		Templates: r.Templates,
