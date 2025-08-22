@@ -3,7 +3,7 @@ module github.com/dryaf/templates/integrations/chirender
 go 1.24
 
 require (
-	github.com/dryaf/templates v0.1.2
+	github.com/dryaf/templates v1.0.0
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/render v1.0.3
 )

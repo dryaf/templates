@@ -1,7 +1,7 @@
 github.com/ajg/form v1.5.1 h1:t9c7v8JUKu/XxOGBU0yjNpaMloxGEJhUkqFRq0ibGeU=
 github.com/ajg/form v1.5.1/go.mod h1:uL1WgH+h2mgNtvBq0339dVnzXdBETtL2LeUXaIv25UY=
-github.com/dryaf/templates/integrations/chirender v0.0.0-20250822202312-10d769eb3fb3 h1:qprdoV08BCq8wK4UASKnCXyDCyMx2qJRSSA5sLRJNxs=
-github.com/dryaf/templates/integrations/chirender v0.0.0-20250822202312-10d769eb3fb3/go.mod h1:AwhAjf3WJV9hpTbabTiFxK59C/kR4Nss8dX/u8V+CMk=
+github.com/dryaf/templates/integrations/chirender v0.0.0-20250822221651-2b72f52fe807 h1:5E+7r7m7SaIk8IH6UWp8EreQ5+bL8mhvnYOSNBAEfqs=
+github.com/dryaf/templates/integrations/chirender v0.0.0-20250822221651-2b72f52fe807/go.mod h1:AwhAjf3WJV9hpTbabTiFxK59C/kR4Nss8dX/u8V+CMk=
 github.com/go-chi/chi/v5 v5.2.2 h1:CMwsvRVTbXVytCk1Wd72Zy1LAsAh9GxMmSNWLHCG618=
 github.com/go-chi/chi/v5 v5.2.2/go.mod h1:L2yAIGWB3H+phAw1NxKwWM+7eUH/lU8pOMm5hHcoops=
 github.com/go-chi/render v1.0.3 h1:AsXqd2a1/INaIfUSKq3G5uA8weYx20FOsM7uSoCyyt4=

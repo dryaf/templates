@@ -1,5 +1,5 @@
-github.com/dryaf/templates/integrations/chi v0.0.0-20250822202312-10d769eb3fb3 h1:Ti9uVAkE+5B0GGSWhZldNwDbfGsHXv1qh0FIykwEck8=
-github.com/dryaf/templates/integrations/chi v0.0.0-20250822202312-10d769eb3fb3/go.mod h1:eFoGQoNYJiCyHU8MS/jP7dWM1/cGW3Z4PU+dRx21JDE=
+github.com/dryaf/templates/integrations/chi v0.0.0-20250822221651-2b72f52fe807 h1:SYhls+TZL61uSxIP0LVE5eGXBQQsSWLd7aWpwGSPZME=
+github.com/dryaf/templates/integrations/chi v0.0.0-20250822221651-2b72f52fe807/go.mod h1:R7Q2NgVExkOxZXh0vfmYiNX/s+sBS5YRpVuc8ztyFsM=
 github.com/go-chi/chi/v5 v5.2.2 h1:CMwsvRVTbXVytCk1Wd72Zy1LAsAh9GxMmSNWLHCG618=
 github.com/go-chi/chi/v5 v5.2.2/go.mod h1:L2yAIGWB3H+phAw1NxKwWM+7eUH/lU8pOMm5hHcoops=
 github.com/google/safehtml v0.1.1-0.20250618200626-e177c9cd28ca h1:aL2qeu+iCHfixWpOTL4Utl5OiuJTwBdmZgSuNe2HpSY=
