@@ -8,5 +8,6 @@ use (
 	./integrations/chi
 	./integrations/chirender
 	./integrations/echo
+	./integrations/gin
 	./integrations/stdlib
 )

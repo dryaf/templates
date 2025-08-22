@@ -15,7 +15,7 @@ A secure, file-system-based Go template engine built on Google's `safehtml/templ
 - **Production-Ready**: Uses Go's `embed.FS` to compile all templates and assets into a single binary for production deployments.
 - **Dynamic Rendering**: Includes a `d_block` helper to render blocks dynamically by name—perfect for headless CMS integrations where the page structure is defined by an API response.
 - **Convenient Helpers**: Comes with a `locals` function to easily pass key-value data to blocks.
-- **Framework Integrations**: Provides optional, lightweight integration packages for `net/http`, `Echo`, and `chi`.
+- **Framework Integrations**: Provides optional, lightweight integration packages for `net/http`, `Echo`, `chi`, and `gin-gonic/gin`.
 
 ## Installation
 
@@ -153,8 +153,7 @@ Passing maps as context to blocks can be verbose. The `locals` helper function m
 {{locals "Name" "Bob" "Age" 42 | d_block "_user_card"}}
 ```
 
-`_user_card.gohtml`:
-```html
+`_user_card.gohtml`:```html
 {{define "_user_card"}}
 <div class="card">
     <h3>{{.Name}}</h3>
@@ -329,10 +328,45 @@ func main() {
 }
 ```
 
+### Gin
+
+The `integrations/gin` package provides a renderer that implements `gin.HTMLRender` for the [Gin framework](https://gin-gonic.com/).
+
+```go
+package main
+
+import (
+	"net/http"
+
+	"github.com/dryaf/templates"
+	templates_gin "github.com/dryaf/templates/integrations/gin"
+	"github.com/gin-gonic/gin"
+)
+
+func main() {
+	tmpls := templates.New(nil, nil)
+	tmpls.MustParseTemplates()
+
+	router := gin.Default()
+	router.HTMLRender = templates_gin.New(tmpls)
+
+	router.GET("/", func(c *gin.Context) {
+		// c.HTML renders the template with the default layout
+		c.HTML(http.StatusOK, "home", "Gin")
+	})
+
+	router.GET("/special", func(c *gin.Context) {
+		// You can specify a layout just like with other integrations
+		c.HTML(http.StatusOK, "special:home", "Gin with a special layout")
+	})
+
+	router.Run(":8080")
+}
+```
+
 ## Roadmap
 
--   [ ] Implement SSE for Hotwired Turbo Streams.
--   [ ] Add tests for Hotwired Turbo integration.
+-   [ ] ...
 
 ## License
 

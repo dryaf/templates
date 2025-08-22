@@ -12,6 +12,8 @@ test:
 	(cd integrations/chi && go test -coverprofile=../../coverage-chi.out)
 	@echo "Running tests for chi-render integration module..."
 	(cd integrations/chirender && go test -coverprofile=../../coverage-chirender.out)
+	@echo "Running tests for gin integration module..."
+	(cd integrations/gin && go test -coverprofile=../../coverage-gin.out)
 	@echo "Combining coverage reports..."
 	@echo "mode: set" > coverage.out
 	@tail -n +2 coverage-main.out >> coverage.out
@@ -19,7 +21,8 @@ test:
 	@tail -n +2 coverage-echo.out >> coverage.out
 	@tail -n +2 coverage-chi.out >> coverage.out
 	@tail -n +2 coverage-chirender.out >> coverage.out
-	@rm coverage-main.out coverage-stdlib.out coverage-echo.out coverage-chi.out coverage-chirender.out
+	@tail -n +2 coverage-gin.out >> coverage.out
+	@rm coverage-main.out coverage-stdlib.out coverage-echo.out coverage-chi.out coverage-chirender.out coverage-gin.out
 
 template-contents:
 	find ./files/templates -type f -exec echo "==> {} <==" \; -exec cat {} \; -exec echo \;
