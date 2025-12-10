@@ -181,6 +181,17 @@ Passing maps as context to blocks can be verbose. The `locals` helper function m
 {{end}}
 ```
 
+### Passing `references` to Blocks
+
+The `references` helper is similar to `locals`, but it ensures that every value passed to the map is a **pointer**. This is useful when your template logic expects pointers (e.g. for nil checks or to avoid copying large structs).
+
+If a value is already a pointer, it is used as is. If it is not a pointer, a new pointer to a copy of the value is created.
+
+```html
+<!-- Passing values as references -->
+{{block "_user_edit" (references "User" .User "IsActive" true)}}
+```
+
 ### Security and `trusted_*` Functions
 
 This library uses `safehtml/template`, which provides protection against XSS by default. It contextually escapes variables.

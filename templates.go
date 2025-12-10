@@ -1,7 +1,20 @@
 // ==== File: templates.go ====
 // Package templates provides a secure, file-system-based Go template engine
-// built on Google's safehtml/template library. It organizes templates into
-// layouts, pages, and reusable blocks, ensuring XSS safety by default.
+// built on Google's safehtml/template library.
+//
+// # Core Concepts
+//
+// This engine organizes templates into a specific directory structure:
+//
+//   - layouts/: specific wrapper templates that define the document structure (e.g. <html>...</html>).
+//   - pages/: individual page templates that render inside a layout.
+//   - blocks/: reusable partials (e.g. forms, navigational elements) that can be included in pages or layouts.
+//
+// # Safety
+//
+// Using safehtml/template ensures that your output is free from XSS vulnerabilities by default.
+// Context-aware escaping is applied automatically. For cases where you strictly trust the input
+// (e.g. from a CMS), special helper functions `trusted_*` are provided.
 package templates
 
 import (
@@ -70,7 +83,7 @@ type Templates struct {
 	BlocksPath string
 
 	// If true, automatically adds helper functions like `d_block`, `locals`,
-	// and `trusted_*` to the template function map. Defaults to true.
+	// `references` and `trusted_*` to the template function map. Defaults to true.
 	AddHeadlessCMSFuncMapHelpers bool
 
 	// The logger to use for internal errors and debug messages.
