@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -917,4 +918,277 @@ func Test_References_Complex(t *testing.T) {
 	} else {
 		t.Errorf("Expected 'slice' to be *[]int, got %T", refs["slice"])
 	}
+}
+
+func Test_NewWithRoot(t *testing.T) {
+	// Create a temporary directory for custom templates
+	tmpDir, err := ioutil.TempDir("", "custom_templates")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create structure
+	layoutsDir := filepath.Join(tmpDir, "layouts")
+	pagesDir := filepath.Join(tmpDir, "pages")
+	blocksDir := filepath.Join(tmpDir, "blocks")
+	os.MkdirAll(layoutsDir, 0755)
+	os.MkdirAll(pagesDir, 0755)
+	os.MkdirAll(blocksDir, 0755)
+
+	// Create files
+	if err := ioutil.WriteFile(filepath.Join(layoutsDir, "custom.gohtml"), []byte(`{{define "layout"}}CustomRoot: {{block "page" .}}{{end}}{{end}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ioutil.WriteFile(filepath.Join(pagesDir, "hello.gohtml"), []byte(`{{define "page"}}Hello {{.}}{{end}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Initialize with custom root
+	tmpls := NewWithRoot(nil, nil, tmpDir)
+	tmpls.LayoutsPath = "layouts" // default, but explicit
+	tmpls.PagesPath = "pages"
+	tmpls.MustParseTemplates()
+
+	// Execute
+	res, err := tmpls.ExecuteTemplateAsText(nil, "custom:hello", "World")
+	if err != nil {
+		t.Fatalf("Failed to execute template: %v", err)
+	}
+
+	expected := "CustomRoot: Hello World"
+	if res != expected {
+		t.Errorf("Expected %q, got %q", expected, res)
+	}
+}
+
+func Test_NewWithRoot_EmptyPath(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Expected panic for empty root path")
+		}
+	}()
+	NewWithRoot(nil, nil, "")
+}
+
+func Test_NewWithRoot_Reload(t *testing.T) {
+	tmpDir, err := ioutil.TempDir("", "custom_templates_reload")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	layoutsDir := filepath.Join(tmpDir, "layouts")
+	pagesDir := filepath.Join(tmpDir, "pages")
+	blocksDir := filepath.Join(tmpDir, "blocks")
+	os.MkdirAll(layoutsDir, 0755)
+	os.MkdirAll(pagesDir, 0755)
+	os.MkdirAll(blocksDir, 0755)
+
+	pagePath := filepath.Join(pagesDir, "reload.gohtml")
+	if err := ioutil.WriteFile(filepath.Join(layoutsDir, "custom.gohtml"), []byte(`{{define "layout"}}{{block "page" .}}{{end}}{{end}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ioutil.WriteFile(pagePath, []byte(`{{define "page"}}Initial{{end}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tmpls := NewWithRoot(nil, nil, tmpDir)
+	tmpls.AlwaysReloadAndParseTemplates = true
+	tmpls.MustParseTemplates()
+
+	// First render
+	res, err := tmpls.ExecuteTemplateAsText(nil, "custom:reload", nil)
+	if err != nil {
+		t.Fatalf("First render failed: %v", err)
+	}
+	if res != "Initial" {
+		t.Errorf("Expected Initial, got %s", res)
+	}
+
+	// Modify file
+	if err := ioutil.WriteFile(pagePath, []byte(`{{define "page"}}Reloaded{{end}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second render
+	res, err = tmpls.ExecuteTemplateAsText(nil, "custom:reload", nil)
+	if err != nil {
+		t.Fatalf("Second render failed: %v", err)
+	}
+	if res != "Reloaded" {
+		t.Errorf("Expected Reloaded, got %s", res)
+	}
+}
+
+func Test_NewWithRoot_Embed(t *testing.T) {
+	// embededTemplates var is defined at top of file, pointing to "files/templates"
+	// We can use it but with NewWithRoot pointing to "files/templates" explicitly
+	// This proves NewWithRoot works with *embed.FS
+
+	tmpls := NewWithRoot(&embededTemplates, nil, "files/templates")
+	tmpls.MustParseTemplates()
+
+	res, err := tmpls.ExecuteTemplateAsText(nil, "person", &Person{Name: "Embed", Age: 42})
+	if err != nil {
+		t.Fatalf("Failed to render with embed fs: %v", err)
+	}
+	if !strings.Contains(res, "Name: Embed") {
+		t.Error("Embed render failed content check")
+	}
+}
+
+func Test_Concurrency(t *testing.T) {
+	// Setup custom templates for concurrency test
+	tmpDir, err := ioutil.TempDir("", "concurrency_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	layoutsDir := filepath.Join(tmpDir, "layouts")
+	pagesDir := filepath.Join(tmpDir, "pages")
+	blocksDir := filepath.Join(tmpDir, "blocks")
+	os.MkdirAll(layoutsDir, 0755)
+	os.MkdirAll(pagesDir, 0755)
+	os.MkdirAll(blocksDir, 0755)
+
+	ioutil.WriteFile(filepath.Join(layoutsDir, "app.gohtml"), []byte("{{define \"layout\"}}{{block \"page\" .}}{{end}}{{end}}"), 0644)
+	ioutil.WriteFile(filepath.Join(pagesDir, "idx.gohtml"), []byte("{{define \"page\"}}Page{{end}}"), 0644)
+
+	tmpls := NewWithRoot(nil, nil, tmpDir)
+	tmpls.MustParseTemplates()
+
+	var wg sync.WaitGroup
+	done := make(chan bool)
+
+	// Start a goroutine that triggers re-parsing
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				// This calls the method we just protected with a lock
+				if err := tmpls.ParseTemplates(); err != nil {
+					// Ignore errors during tear-down/file-change race, but print unexpected ones
+				}
+				time.Sleep(1 * time.Millisecond)
+			}
+		}
+	}()
+
+	// Start readers
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-done:
+					return
+				default:
+					_, err := tmpls.ExecuteTemplateAsText(nil, "idx", nil)
+					if err != nil {
+						// Errors are possible if map is empty during re-init
+					}
+				}
+			}
+		}()
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	close(done)
+	wg.Wait()
+}
+
+func Test_d_block_Error(t *testing.T) {
+	tmpls := New(nil, nil)
+	// We don't parse templates, so map is empty
+
+	// Case 1: Block not found
+	_, err := tmpls.RenderBlockAsHTMLString("_missing", nil)
+	if err == nil {
+		t.Error("Expected error for missing block")
+	} else if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("Expected 'not found' error, got %v", err)
+	}
+
+	// Case 2: Invalid name (no underscore)
+	_, err = tmpls.RenderBlockAsHTMLString("no_underscore", nil)
+	if err == nil {
+		t.Error("Expected error for invalid block name")
+	}
+}
+
+func Test_ContextHelpers(t *testing.T) {
+	// Setup capture logger
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+
+	tmpls := New(nil, nil)
+	tmpls.Logger = logger
+
+	ctx := context.Background()
+
+	// Test d_block_ctx logging
+	// We expect an error because "_missing" doesn't exist
+	tmpls.RenderBlockAsHTMLStringWithContext(ctx, "_missing", nil)
+
+	output := buf.String()
+	if !strings.Contains(output, "d_block_ctx failed") {
+		t.Errorf("Expected log 'd_block_ctx failed', got: %s", output)
+	}
+	if !strings.Contains(output, "_missing") {
+		t.Errorf("Expected log to contain block name, got: %s", output)
+	}
+
+	buf.Reset()
+
+	// Test trusted_html_ctx logging
+	// We need to access the function map directly or via a template execution
+	// But since the helpers are closure-based internal functions added to the map,
+	// we can render a template that uses them.
+
+	// Register helpers manually if not already (New does it)
+	// But let's verify via template execution
+
+	// Create a template that uses trusted_html_ctx
+	t.Run("Template Execution", func(t *testing.T) {
+		tmpDir, _ := ioutil.TempDir("", "ctx_test")
+		defer os.RemoveAll(tmpDir)
+
+		layoutDir := filepath.Join(tmpDir, "layouts")
+		os.MkdirAll(layoutDir, 0755)
+		os.MkdirAll(filepath.Join(tmpDir, "pages"), 0755)
+		os.MkdirAll(filepath.Join(tmpDir, "blocks"), 0755)
+		ioutil.WriteFile(filepath.Join(layoutDir, "main.gohtml"), []byte(`{{define "layout"}}{{ trusted_html_ctx .Ctx "<b>Bold</b>" }}{{end}}`), 0644)
+		ioutil.WriteFile(filepath.Join(tmpDir, "pages", "index.gohtml"), []byte(`{{define "page"}}Page{{end}}`), 0644)
+
+		tmpls := NewWithRoot(nil, nil, tmpDir)
+		tmpls.Logger = logger
+		if err := tmpls.ParseTemplates(); err != nil {
+			t.Fatalf("ParseTemplates failed: %v", err)
+		}
+
+		// Execute with a context
+		type Data struct {
+			Ctx context.Context
+		}
+
+		_, err := tmpls.ExecuteTemplateAsText(nil, "main:index", Data{Ctx: ctx})
+		if err != nil {
+			t.Fatalf("Execution failed: %v", err)
+		}
+
+		output := buf.String()
+		if !strings.Contains(output, "trusted_html_ctx called") {
+			t.Errorf("Expected log 'trusted_html_ctx called', got: %s", output)
+		}
+		if !strings.Contains(output, "<b>Bold</b>") {
+			t.Errorf("Expected log to contain content preview, got: %s", output)
+		}
+	})
 }

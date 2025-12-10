@@ -19,6 +19,7 @@ package templates
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -36,6 +37,7 @@ import (
 
 	"github.com/google/safehtml"
 	"github.com/google/safehtml/template"
+	template_unchecked "github.com/google/safehtml/template/uncheckedconversions"
 	"github.com/google/safehtml/uncheckedconversions"
 )
 
@@ -101,6 +103,7 @@ type Templates struct {
 }
 
 // New creates a new Templates instance from a filesystem and a custom function map.
+// It uses the default root path "files/templates".
 //
 // Parameters:
 //   - fsys: The filesystem containing the templates. Due to security constraints
@@ -112,6 +115,22 @@ type Templates struct {
 //
 // Returns a new, configured *Templates instance.
 func New(fsys fs.FS, fnMap template.FuncMap) *Templates {
+	return NewWithRoot(fsys, fnMap, templatesPath)
+}
+
+// NewWithRoot creates a new Templates instance from a filesystem, a custom function map,
+// and a custom root path.
+//
+// Parameters:
+//   - fsys: The filesystem containing the templates. See New for details.
+//   - fnMap: A `template.FuncMap` containing custom functions.
+//   - rootPath: The root directory within the filesystem or OS where templates are located.
+//     Must not be empty.
+func NewWithRoot(fsys fs.FS, fnMap template.FuncMap, rootPath string) *Templates {
+	if rootPath == "" {
+		panic("templates.NewWithRoot: rootPath must not be empty")
+	}
+
 	var trustedFileSystem template.TrustedFS
 	var fileSystemForParsing fs.FS
 	isEmbed := false
@@ -119,11 +138,11 @@ func New(fsys fs.FS, fnMap template.FuncMap) *Templates {
 	switch v := fsys.(type) {
 	case nil:
 		// Default to OS filesystem, chrooted to the templates path.
-		fileSystemForParsing = os.DirFS(templatesPath)
-		trustedFileSystem = template.TrustedFSFromTrustedSource(template.TrustedSourceFromConstant(templatesPath))
+		fileSystemForParsing = os.DirFS(rootPath)
+		trustedFileSystem = template.TrustedFSFromTrustedSource(template_unchecked.TrustedSourceFromStringKnownToSatisfyTypeContract(rootPath))
 	case *embed.FS:
 		// It's an embedded filesystem.
-		sub, err := fs.Sub(v, templatesPath)
+		sub, err := fs.Sub(v, rootPath)
 		if err != nil {
 			panic(fmt.Errorf("unable to create sub-filesystem for templates: %w", err))
 		}
@@ -164,7 +183,9 @@ func (t *Templates) AddFuncMapHelpers() {
 	}
 	if t.AddHeadlessCMSFuncMapHelpers {
 		t.AddDynamicBlockToFuncMap()
+		t.AddDynamicBlockCtxToFuncMap()
 		t.addTrustedConverterFuncs()
+		t.addTrustedConverterFuncsWithContext()
 		t.AddLocalsToFuncMap()
 		t.AddReferencesToFuncMap()
 	}
@@ -181,6 +202,13 @@ func (t *Templates) MustParseTemplates() {
 // pages, and blocks directories. It populates the internal template map.
 // This method is safe for concurrent use.
 func (t *Templates) ParseTemplates() error {
+	t.templatesLock.Lock()
+	defer t.templatesLock.Unlock()
+	return t.parseTemplates()
+}
+
+// parseTemplates is the internal implementation that expects the caller to hold the lock.
+func (t *Templates) parseTemplates() error {
 	t.templates = make(map[string]*template.Template)
 	hfs := http.FS(t.fileSystem)
 	layouts, err := getFilePathsInDir(hfs, t.LayoutsPath, t.fileSystemIsEmbed)
@@ -278,15 +306,16 @@ func (t *Templates) ExecuteTemplate(w io.Writer, r *http.Request, templateName s
 	// dev mode for example
 	if t.AlwaysReloadAndParseTemplates {
 		if t.templatesLock.TryLock() {
-			err := t.ParseTemplates()
+			err := t.parseTemplates()
 			t.templatesLock.Unlock()
 			if err != nil {
 				return err
 			}
 		}
-		t.templatesLock.RLock()
-		defer t.templatesLock.RUnlock()
 	}
+
+	t.templatesLock.RLock()
+	defer t.templatesLock.RUnlock()
 
 	if templateName == "" {
 		templateName = "error"
@@ -358,6 +387,19 @@ func (t *Templates) RenderBlockAsHTMLString(blockname string, payload interface{
 	return uncheckedconversions.HTMLFromStringKnownToSatisfyTypeContract(b.String()), err
 }
 
+// RenderBlockAsHTMLStringWithContext renders a block to HTML string and logs errors
+// with the provided context. Registered as 'd_block_ctx'.
+func (t *Templates) RenderBlockAsHTMLStringWithContext(ctx context.Context, blockname string, payload interface{}) (safehtml.HTML, error) {
+	html, err := t.RenderBlockAsHTMLString(blockname, payload)
+	if err != nil {
+		t.Logger.ErrorContext(ctx, "d_block_ctx failed", "block", blockname, "error", err)
+	} else {
+		// Optional: Log success if robust tracing is desired, but might be too verbose.
+		// t.Logger.DebugContext(ctx, "d_block_ctx rendered", "block", blockname)
+	}
+	return html, err
+}
+
 // AddDynamicBlockToFuncMap adds the 'd_block' function to the FuncMap. This
 // powerful helper allows templates to render blocks dynamically by name, which
 // is ideal for pages whose structure is determined by an API response (e.g.,
@@ -370,6 +412,16 @@ func (t *Templates) AddDynamicBlockToFuncMap() {
 		panic("function name 'd_block' is already in use in FuncMap")
 	}
 	t.funcMap["d_block"] = t.RenderBlockAsHTMLString
+}
+
+// AddDynamicBlockCtxToFuncMap adds 'd_block_ctx' to the FuncMap.
+func (t *Templates) AddDynamicBlockCtxToFuncMap() {
+	_, ok := t.funcMap["d_block_ctx"]
+	if ok {
+		t.Logger.Error("function name is already in use in FuncMap", "name", "d_block_ctx")
+		panic("function name 'd_block_ctx' is already in use in FuncMap")
+	}
+	t.funcMap["d_block_ctx"] = t.RenderBlockAsHTMLStringWithContext
 }
 
 // addTrustedConverterFuncs adds the 'trusted_*' functions to the FuncMap.
@@ -392,6 +444,62 @@ func (t *Templates) addTrustedConverterFuncs() {
 	add("trusted_url", trustedURL)
 	add("trusted_resource_url", trustedResourceURL)
 	add("trusted_identifier", trustedIdentifier)
+}
+
+// addTrustedConverterFuncsWithContext adds 'trusted_*_ctx' functions that log their usage.
+func (t *Templates) addTrustedConverterFuncsWithContext() {
+	add := func(name string, f any) {
+		if _, ok := t.funcMap[name]; ok {
+			t.Logger.Error("function name is already in use in FuncMap", "name", name)
+			panic(fmt.Sprintf("function name %q is already in use in FuncMap", name))
+		}
+		t.funcMap[name] = f
+	}
+
+	// Helpers that log the event
+	trustedHTMLCtx := func(ctx context.Context, s string) safehtml.HTML {
+		t.Logger.InfoContext(ctx, "trusted_html_ctx called", "content_preview", firstN(s, 50))
+		return trustedHTML(s)
+	}
+	trustedScriptCtx := func(ctx context.Context, s string) safehtml.Script {
+		t.Logger.InfoContext(ctx, "trusted_script_ctx called", "content_preview", firstN(s, 50))
+		return trustedScript(s)
+	}
+	trustedStyleCtx := func(ctx context.Context, s string) safehtml.Style {
+		t.Logger.InfoContext(ctx, "trusted_style_ctx called", "content_preview", firstN(s, 50))
+		return trustedStyle(s)
+	}
+	trustedStyleSheetCtx := func(ctx context.Context, s string) safehtml.StyleSheet {
+		t.Logger.InfoContext(ctx, "trusted_stylesheet_ctx called", "content_preview", firstN(s, 50))
+		return trustedStyleSheet(s)
+	}
+	trustedURLCtx := func(ctx context.Context, s string) safehtml.URL {
+		t.Logger.InfoContext(ctx, "trusted_url_ctx called", "url", s)
+		return trustedURL(s)
+	}
+	trustedResourceURLCtx := func(ctx context.Context, s string) safehtml.TrustedResourceURL {
+		t.Logger.InfoContext(ctx, "trusted_resource_url_ctx called", "url", s)
+		return trustedResourceURL(s)
+	}
+	trustedIdentifierCtx := func(ctx context.Context, s string) safehtml.Identifier {
+		t.Logger.InfoContext(ctx, "trusted_identifier_ctx called", "identifier", s)
+		return trustedIdentifier(s)
+	}
+
+	add("trusted_html_ctx", trustedHTMLCtx)
+	add("trusted_script_ctx", trustedScriptCtx)
+	add("trusted_style_ctx", trustedStyleCtx)
+	add("trusted_stylesheet_ctx", trustedStyleSheetCtx)
+	add("trusted_url_ctx", trustedURLCtx)
+	add("trusted_resource_url_ctx", trustedResourceURLCtx)
+	add("trusted_identifier_ctx", trustedIdentifierCtx)
+}
+
+func firstN(s string, n int) string {
+	if len(s) > n {
+		return s[:n] + "..."
+	}
+	return s
 }
 
 // AddLocalsToFuncMap adds the 'locals' function to the FuncMap. This helper

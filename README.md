@@ -103,6 +103,16 @@ import "github.com/dryaf/templates"
     }
     ```
 
+## Configuration
+
+### Custom Template Directory
+
+By default, the library looks for templates in `files/templates`. You can change this by using `NewWithRoot`:
+
+```go
+tmpls := templates.NewWithRoot(nil, nil, "my/custom/templates")
+```
+
 ## Running the Examples
 
 The project includes a comprehensive set of runnable examples in the `_examples` directory. To run them:
@@ -215,6 +225,38 @@ Sometimes, you receive data from a trusted source (like a headless CMS) that you
 <div>
     {{trusted_html .SafeHTMLFromCMS}}
 </div>
+```
+
+### Context-Aware Helpers
+
+For structured logging and auditing, this library provides context-aware versions of `d_block` and `trusted_*` functions. These helpers require a `context.Context` as the first argument.
+
+#### `d_block_ctx`
+
+Same as `d_block`, but logs errors (e.g. missing blocks) using the `Logger` attached to `Templates`.
+
+```go
+// In template
+{{ d_block_ctx .Ctx "my_block_name" .Data }}
+```
+
+#### `trusted_*_ctx`
+
+Context-aware versions of all `trusted_*` functions. They log an **INFO** message when called, which is useful for security auditing to track when and where bypasses are used.
+
+*   `trusted_html_ctx`
+*   `trusted_script_ctx`
+*   `trusted_style_ctx`
+*   `trusted_stylesheet_ctx`
+*   `trusted_url_ctx`
+*   `trusted_resource_url_ctx`
+*   `trusted_identifier_ctx`
+
+Usage:
+
+```go
+// In template
+{{ trusted_html_ctx .Ctx "<b>Bold Content</b>" }}
 ```
 
 ## Integrations
