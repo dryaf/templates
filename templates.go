@@ -52,6 +52,15 @@ const pagesPath = "pages"
 const blocksPath = "blocks"
 const fileExtension = ".gohtml"
 
+var (
+	// ErrTemplateNotFound is returned when a requested template or layout is not in the parsed map.
+	ErrTemplateNotFound = errors.New("template not found")
+	// ErrBlockNotFound is returned when a requested block is not found.
+	ErrBlockNotFound = errors.New("block not found")
+	// ErrInvalidBlockName is returned when a block name does not adhere to naming conventions (e.g. must start with '_').
+	ErrInvalidBlockName = errors.New("invalid block name")
+)
+
 // Templates is the core engine for managing, parsing, and executing templates.
 // It holds the parsed templates, configuration, and the underlying filesystem.
 type Templates struct {
@@ -98,51 +107,101 @@ type Templates struct {
 	fileSystemTrusted template.TrustedFS
 	fileSystemIsEmbed bool
 
+	// Internal configuration
+	rootPath string
+	inputFS  fs.FS
+
 	templates     map[string]*template.Template
 	templatesLock sync.RWMutex
 }
 
-// New creates a new Templates instance from a filesystem and a custom function map.
-// It uses the default root path "files/templates".
-//
-// Parameters:
-//   - fsys: The filesystem containing the templates. Due to security constraints
-//     in `safehtml/template`, this must be either an `*embed.FS` (for production)
-//     or `nil` to use the local operating system filesystem (for development).
-//     Providing any other type will cause a panic.
-//   - fnMap: A `template.FuncMap` containing custom functions to make available
-//     within templates. Can be nil if no custom functions are needed.
-//
-// Returns a new, configured *Templates instance.
-func New(fsys fs.FS, fnMap template.FuncMap) *Templates {
-	return NewWithRoot(fsys, fnMap, templatesPath)
+// Option defines a functional option for configuring the Templates engine.
+type Option func(*Templates)
+
+// WithFileSystem sets the filesystem and root path for templates.
+// The rootPath argument specifies the directory within the filesystem where templates are stored.
+// If fs is nil, it uses the OS filesystem rooted at the given path.
+func WithFileSystem(fsys fs.FS) Option {
+	return func(t *Templates) {
+		t.inputFS = fsys
+	}
 }
 
-// NewWithRoot creates a new Templates instance from a filesystem, a custom function map,
-// and a custom root path.
+// WithRoot sets the root path for templates.
+func WithRoot(path string) Option {
+	return func(t *Templates) {
+		t.rootPath = path
+	}
+}
+
+// WithFuncMap adds custom functions to the template engine.
+func WithFuncMap(fm template.FuncMap) Option {
+	return func(t *Templates) {
+		t.funcMap = fm
+	}
+}
+
+// WithReload enables or disables always reloading parsing templates on execution.
+func WithReload(enabled bool) Option {
+	return func(t *Templates) {
+		t.AlwaysReloadAndParseTemplates = enabled
+	}
+}
+
+// WithLogger sets a custom logger.
+func WithLogger(l *slog.Logger) Option {
+	return func(t *Templates) {
+		t.Logger = l
+	}
+}
+
+// New creates a new Templates instance configured with the provided options.
 //
-// Parameters:
-//   - fsys: The filesystem containing the templates. See New for details.
-//   - fnMap: A `template.FuncMap` containing custom functions.
-//   - rootPath: The root directory within the filesystem or OS where templates are located.
-//     Must not be empty.
-func NewWithRoot(fsys fs.FS, fnMap template.FuncMap, rootPath string) *Templates {
-	if rootPath == "" {
-		panic("templates.NewWithRoot: rootPath must not be empty")
+// By default, it looks for templates in "files/templates" within the OS filesystem.
+// You can change this using `WithFileSystem` or `WithRoot`.
+func New(opts ...Option) *Templates {
+	t := &Templates{
+		DefaultLayout:         "application",
+		TemplateFileExtension: ".gohtml",
+		LayoutsPath:           layoutsPath,
+		PagesPath:             pagesPath,
+		BlocksPath:            blocksPath,
+
+		AddHeadlessCMSFuncMapHelpers: true, // d_block, trust_html
+		Logger:                       slog.Default(),
+		funcMap:                      make(template.FuncMap),
+
+		rootPath: templatesPath,
+		inputFS:  nil,
+	}
+
+	for _, opt := range opts {
+		opt(t)
+	}
+
+	t.initFileSystem()
+	t.AddFuncMapHelpers()
+
+	return t
+}
+
+func (t *Templates) initFileSystem() {
+	if t.rootPath == "" {
+		panic("templates.New: rootPath must not be empty")
 	}
 
 	var trustedFileSystem template.TrustedFS
 	var fileSystemForParsing fs.FS
 	isEmbed := false
 
-	switch v := fsys.(type) {
+	switch v := t.inputFS.(type) {
 	case nil:
 		// Default to OS filesystem, chrooted to the templates path.
-		fileSystemForParsing = os.DirFS(rootPath)
-		trustedFileSystem = template.TrustedFSFromTrustedSource(template_unchecked.TrustedSourceFromStringKnownToSatisfyTypeContract(rootPath))
+		fileSystemForParsing = os.DirFS(t.rootPath)
+		trustedFileSystem = template.TrustedFSFromTrustedSource(template_unchecked.TrustedSourceFromStringKnownToSatisfyTypeContract(t.rootPath))
 	case *embed.FS:
 		// It's an embedded filesystem.
-		sub, err := fs.Sub(v, rootPath)
+		sub, err := fs.Sub(v, t.rootPath)
 		if err != nil {
 			panic(fmt.Errorf("unable to create sub-filesystem for templates: %w", err))
 		}
@@ -153,25 +212,9 @@ func NewWithRoot(fsys fs.FS, fnMap template.FuncMap, rootPath string) *Templates
 		panic("templates.New: provided fsys is not an *embed.FS or nil. Due to security constraints in the underlying safehtml/template library, only embedded filesystems or the OS filesystem (when fsys is nil) are supported.")
 	}
 
-	t := &Templates{
-		DefaultLayout:         "application",
-		TemplateFileExtension: ".gohtml",
-		LayoutsPath:           layoutsPath,
-		PagesPath:             pagesPath,
-		BlocksPath:            blocksPath,
-
-		AddHeadlessCMSFuncMapHelpers: true, // d_block, trust_html
-		Logger:                       slog.Default(),
-		funcMap:                      fnMap,
-
-		fileSystem:        fileSystemForParsing,
-		fileSystemTrusted: trustedFileSystem,
-		fileSystemIsEmbed: isEmbed,
-	}
-
-	t.AddFuncMapHelpers()
-
-	return t
+	t.fileSystem = fileSystemForParsing
+	t.fileSystemTrusted = trustedFileSystem
+	t.fileSystemIsEmbed = isEmbed
 }
 
 // AddFuncMapHelpers populates the template function map with the default helpers
@@ -317,72 +360,65 @@ func (t *Templates) ExecuteTemplate(w io.Writer, r *http.Request, templateName s
 	t.templatesLock.RLock()
 	defer t.templatesLock.RUnlock()
 
-	if templateName == "" {
-		templateName = "error"
-	}
+	// Determine lookupName and execName based on the templateName format
+	var lookupName, execName string
 
-	// block/snippet/partial
 	if strings.HasPrefix(templateName, "_") {
-		tmpl, ok := t.templates[templateName]
-		if !ok {
-			return errors.New("template: name not found ->" + templateName)
+		// block/snippet/partial
+		// Blocks are stored directly with their name
+		lookupName = templateName
+		execName = templateName
+	} else if strings.HasPrefix(templateName, ":") {
+		// page only
+		// :page -> lookup "page", execute "page" (the inner define)
+		lookupName = templateName
+		execName = "page"
+	} else if strings.Contains(templateName, ":") {
+		// with layout defined in templateName
+		// layout:page -> lookup "layout:page", execute "layout"
+		lookupName = templateName
+		execName = "layout"
+	} else {
+		// with layout [from request-context or default from config]
+		layoutIsSetInContext := false
+		if r != nil {
+			var layout string
+			layout, layoutIsSetInContext = r.Context().Value(LayoutContextKey{}).(string)
+			if layoutIsSetInContext {
+				lookupName = fmt.Sprint(layout, ":", templateName)
+			}
 		}
-		return tmpl.ExecuteTemplate(w, templateName, data) // block has template name defined, so only render that
-	}
-	// page only
-	if strings.HasPrefix(templateName, ":") {
-		tmpl, ok := t.templates[templateName]
-		if !ok {
-			return errors.New("template: name not found ->" + templateName)
+		if !layoutIsSetInContext {
+			lookupName = fmt.Sprint(t.DefaultLayout, ":", templateName)
 		}
-		return tmpl.ExecuteTemplate(w, "page", data) // render page only including its blocks (every page is defined as "page" within the file for layout combination reasons as we don't have yield)
+		execName = "layout"
 	}
 
-	// with layout defined in templateName
-	if strings.Contains(templateName, ":") {
-		tmpl, ok := t.templates[templateName]
-		if !ok {
-			return errors.New("template: name not found ->" + templateName)
-		}
-		return tmpl.ExecuteTemplate(w, "layout", data)
-	}
-
-	// with layout [from request-context or default from config]
-	layoutIsSetInContext := false
-	if r != nil {
-		var layout string
-		layout, layoutIsSetInContext = r.Context().Value(LayoutContextKey{}).(string)
-		if layoutIsSetInContext {
-			templateName = fmt.Sprint(layout, ":", templateName)
-		}
-	}
-	if !layoutIsSetInContext {
-		templateName = fmt.Sprint(t.DefaultLayout, ":", templateName)
-	}
-
-	tmpl, ok := t.templates[templateName]
+	// check if the template exists
+	tmpl, ok := t.templates[lookupName]
 	if !ok {
-		return errors.New("template: name not found ->" + templateName)
+		return fmt.Errorf("%w: %s", ErrTemplateNotFound, lookupName)
 	}
-	return tmpl.ExecuteTemplate(w, "layout", data)
+
+	return tmpl.ExecuteTemplate(w, execName, data)
 }
 
 // RenderBlockAsHTMLString renders a specific block to a safehtml.HTML string.
 // This is useful for rendering partials inside other logic. The block name must
 // start with an underscore "_".
-func (t *Templates) RenderBlockAsHTMLString(blockname string, payload interface{}) (safehtml.HTML, error) {
-	if !strings.HasPrefix(blockname, "_") {
-		return safehtml.HTML{}, errors.New("blockname needs to start with _")
+func (t *Templates) RenderBlockAsHTMLString(name string, data interface{}) (safehtml.HTML, error) {
+	if !strings.HasPrefix(name, "_") {
+		return safehtml.HTML{}, fmt.Errorf("%w: blockname needs to start with _", ErrInvalidBlockName)
 	}
-	if len(blockname) > 255 {
-		return safehtml.HTML{}, errors.New("number of characters in string must not exceed 255")
+	if len(name) > 255 {
+		return safehtml.HTML{}, fmt.Errorf("%w: number of characters in string must not exceed 255", ErrInvalidBlockName)
 	}
 	b := bytes.Buffer{}
-	tt, ok := t.templates[blockname]
+	tt, ok := t.templates[name]
 	if !ok {
-		return safehtml.HTML{}, errors.New("template " + blockname + " not found in templates-map")
+		return safehtml.HTML{}, fmt.Errorf("%w: template %s not found in templates-map", ErrBlockNotFound, name)
 	}
-	err := tt.ExecuteTemplate(&b, blockname, payload)
+	err := tt.ExecuteTemplate(&b, name, data)
 
 	return uncheckedconversions.HTMLFromStringKnownToSatisfyTypeContract(b.String()), err
 }

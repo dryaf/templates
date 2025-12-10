@@ -47,7 +47,7 @@ func main() {
 			log.Fatalf("FATAL: 'files/templates' directory not found. Please run `make setup-examples` from the project root.")
 		}
 		log.Println("Using local filesystem for templates (development mode)")
-		tmpls = templates.New(nil, nil)
+		tmpls = templates.New()
 		tmpls.AlwaysReloadAndParseTemplates = true
 	}
 	tmpls.MustParseTemplates()

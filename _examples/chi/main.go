@@ -43,7 +43,7 @@ func main() {
 		tmpls = templates.New(&embeddedFiles, nil)
 	} else {
 		log.Println("Using local filesystem for templates (development mode)")
-		tmpls = templates.New(nil, nil)
+		tmpls = templates.New()
 		tmpls.AlwaysReloadAndParseTemplates = true
 	}
 	tmpls.MustParseTemplates()

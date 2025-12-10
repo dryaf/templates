@@ -4,10 +4,8 @@ package echo
 
 import (
 	"io"
-	"io/fs"
 
 	"github.com/dryaf/templates"
-	"github.com/google/safehtml/template"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -23,12 +21,10 @@ func (e *echoRenderer) Render(w io.Writer, name string, data interface{}, ctx ec
 	return e.ExecuteTemplate(w, ctx.Request(), name, data)
 }
 
-// NewTemplatesRenderer creates a new echo.Renderer with the given filesystem and function map.
+// NewTemplatesRenderer creates a new echo.Renderer with the given options.
 // It is a convenience wrapper around templates.New.
-// Pass nil for fsys to use the local operating system filesystem. For production,
-// an embed.FS is recommended.
-func NewTemplatesRenderer(fsys fs.FS, fnMap template.FuncMap) echo.Renderer {
-	return &echoRenderer{templates.New(fsys, fnMap)}
+func NewTemplatesRenderer(opts ...templates.Option) echo.Renderer {
+	return &echoRenderer{templates.New(opts...)}
 }
 
 // Renderer creates a new echo.Renderer from an existing templates.Templates instance.

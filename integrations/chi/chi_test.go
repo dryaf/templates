@@ -4,6 +4,7 @@ package chi
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -12,9 +13,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/safehtml/template"
+
 	"github.com/dryaf/templates"
 	"github.com/go-chi/chi/v5"
-	"github.com/google/safehtml/template"
 )
 
 type Person struct {
@@ -45,14 +47,14 @@ func TestMain(m *testing.M) {
 
 // setup creates and initializes a Renderer for testing.
 func setup(t *testing.T) *Renderer {
-	tmpls := templates.New(nil, nil)
+	tmpls := templates.New()
 	tmpls.MustParseTemplates()
 	return FromTemplates(tmpls)
 }
 
 func TestNewTemplatesRendererAndFromTemplates(t *testing.T) {
 	t.Run("NewTemplatesRenderer", func(t *testing.T) {
-		renderer := NewTemplatesRenderer(nil, template.FuncMap{"testFunc": func() string { return "hello" }})
+		renderer := NewTemplatesRenderer(templates.WithFuncMap(template.FuncMap{"testFunc": func() string { return "hello" }}))
 		if renderer == nil {
 			t.Fatal("NewTemplatesRenderer returned nil")
 		}
@@ -62,7 +64,7 @@ func TestNewTemplatesRendererAndFromTemplates(t *testing.T) {
 	})
 
 	t.Run("FromTemplates", func(t *testing.T) {
-		tmpls := templates.New(nil, nil)
+		tmpls := templates.New()
 		renderer := FromTemplates(tmpls)
 		if renderer == nil {
 			t.Fatal("FromTemplates returned nil")
@@ -167,8 +169,8 @@ func TestRenderer_Render(t *testing.T) {
 		if err == nil {
 			t.Fatal("Expected an error for a non-existent template, but got nil")
 		}
-		if !strings.Contains(err.Error(), "template: name not found") {
-			t.Errorf("Expected error to contain 'template: name not found', but got: %v", err)
+		if !errors.Is(err, templates.ErrTemplateNotFound) {
+			t.Errorf("Expected error ErrTemplateNotFound, but got: %v", err)
 		}
 		if w.Code != http.StatusNotFound {
 			t.Errorf("Expected status code %d even on error, but got %d", http.StatusNotFound, w.Code)

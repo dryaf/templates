@@ -43,7 +43,7 @@ func main() {
 	} else {
 		log.Println("Using local filesystem for templates (development mode)")
 		gin.SetMode(gin.DebugMode)
-		tmpls = templates.New(nil, nil)
+		tmpls = templates.New()
 		tmpls.AlwaysReloadAndParseTemplates = true
 	}
 	tmpls.MustParseTemplates()

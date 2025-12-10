@@ -16,12 +16,12 @@ type Renderer struct {
 	*templates.Templates
 }
 
-// NewTemplatesRenderer creates a new Renderer with the given filesystem and function map.
-// It is a convenience wrapper around templates.New.
+// New creates a new Renderer with the given filesystem and function map.
+// It is a convenience wrapper around templates.New, using functional options.
 // Pass nil for fsys to use the local operating system filesystem. For production,
 // an embed.FS is recommended.
-func NewTemplatesRenderer(fsys fs.FS, fnMap template.FuncMap) *Renderer {
-	return &Renderer{templates.New(fsys, fnMap)}
+func New(fsys fs.FS, fnMap template.FuncMap) *Renderer {
+	return &Renderer{templates.New(templates.WithFileSystem(fsys), templates.WithFuncMap(fnMap))}
 }
 
 // FromTemplates creates a new Renderer from an existing templates.Templates instance.

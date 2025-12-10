@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 }
 
 func setup(t *testing.T) (*gin.Engine, *templates.Templates) {
-	tmpls := templates.New(nil, nil)
+	tmpls := templates.New()
 	tmpls.MustParseTemplates()
 
 	// Use gin.Default() to include the recovery middleware, which is essential
@@ -46,7 +46,7 @@ func setup(t *testing.T) (*gin.Engine, *templates.Templates) {
 }
 
 func TestNew(t *testing.T) {
-	tmpls := templates.New(nil, nil)
+	tmpls := templates.New()
 	renderer := New(tmpls)
 	if renderer == nil {
 		t.Fatal("New returned nil")

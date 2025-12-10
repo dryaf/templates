@@ -58,7 +58,7 @@ func setup(t *testing.T) *Renderer {
 	// By passing nil, templates.New() will use the local filesystem.
 	// Thanks to the symlink created in TestMain, it will find and read
 	// the project's actual template files from './files/templates/...'.
-	tmpls := templates.New(nil, nil)
+	tmpls := templates.New()
 	tmpls.MustParseTemplates()
 	return FromTemplates(tmpls)
 }
@@ -66,7 +66,7 @@ func setup(t *testing.T) *Renderer {
 func TestNewTemplatesRendererAndFromTemplates(t *testing.T) {
 	t.Run("NewTemplatesRenderer", func(t *testing.T) {
 		// We pass a nil embed.FS because we are testing construction, not parsing.
-		renderer := NewTemplatesRenderer(nil, template.FuncMap{"testFunc": func() string { return "hello" }})
+		renderer := New(nil, template.FuncMap{"testFunc": func() string { return "hello" }})
 		if renderer == nil {
 			t.Fatal("NewTemplatesRenderer returned nil")
 		}
@@ -77,7 +77,7 @@ func TestNewTemplatesRendererAndFromTemplates(t *testing.T) {
 
 	t.Run("FromTemplates", func(t *testing.T) {
 		// Create a templates instance manually, which will use the filesystem.
-		tmpls := templates.New(nil, nil)
+		tmpls := templates.New()
 		// Wrap it with the renderer
 		renderer := FromTemplates(tmpls)
 		if renderer == nil {
@@ -185,8 +185,8 @@ func TestRenderer_Render(t *testing.T) {
 		if err == nil {
 			t.Fatal("Expected an error for a non-existent template, but got nil")
 		}
-		if !strings.Contains(err.Error(), "template: name not found") {
-			t.Errorf("Expected error to contain 'template: name not found', but got: %v", err)
+		if !strings.Contains(err.Error(), templates.ErrTemplateNotFound.Error()) {
+			t.Errorf("Expected error to contain '%v', but got: %v", templates.ErrTemplateNotFound, err)
 		}
 		// The header is written before the error is found. This is expected.
 		if w.Code != http.StatusNotFound {

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/dryaf/templates"
+	"github.com/google/safehtml/template"
 	"github.com/labstack/echo/v4"
 )
 
@@ -42,7 +43,7 @@ func TestMain(m *testing.M) {
 
 // setup creates and initializes an echo.Renderer and echo.Echo instance for testing.
 func setup(t *testing.T) (*echoRenderer, *echo.Echo) {
-	tmpls := templates.New(nil, nil)
+	tmpls := templates.New()
 	tmpls.MustParseTemplates()
 
 	e := echo.New()
@@ -54,14 +55,14 @@ func setup(t *testing.T) (*echoRenderer, *echo.Echo) {
 
 func TestNewTemplatesRendererAndRenderer(t *testing.T) {
 	t.Run("NewTemplatesRenderer", func(t *testing.T) {
-		renderer := NewTemplatesRenderer(nil, nil)
+		renderer := NewTemplatesRenderer(templates.WithFuncMap(template.FuncMap{"testFunc": func() string { return "hello" }}))
 		if renderer == nil {
 			t.Fatal("NewTemplatesRenderer returned nil")
 		}
 	})
 
 	t.Run("Renderer", func(t *testing.T) {
-		tmpls := templates.New(nil, nil)
+		tmpls := templates.New()
 		renderer := Renderer(tmpls).(*echoRenderer)
 		if renderer.Templates != tmpls {
 			t.Fatal("Renderer did not wrap the provided Templates instance")

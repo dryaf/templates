@@ -103,14 +103,60 @@ import "github.com/dryaf/templates"
     }
     ```
 
-## Configuration
+### Configuration
 
-### Custom Template Directory
+The `New` function now accepts **Functional Options** for flexible configuration:
 
-By default, the library looks for templates in `files/templates`. You can change this by using `NewWithRoot`:
+-   `WithFileSystem(fs fs.FS)`: Sets the filesystem (OS or Embed).
+-   `WithRoot(path string)`: Sets the root directory for templates.
+-   `WithFuncMap(fm template.FuncMap)`: Adds custom helper functions.
+-   `WithReload(enabled bool)`: Enables auto-reloading for development.
+-   `WithLogger(logger *slog.Logger)`: Sets a custom logger.
+
+#### Dev Mode (OS Filesystem)
 
 ```go
-tmpls := templates.NewWithRoot(nil, nil, "my/custom/templates")
+// Defaults to OS filesystem, rooted at "files/templates"
+tmpls := templates.New(
+    templates.WithReload(true), // Enable hot-reloading
+)
+```
+
+#### Production Mode (Embedded Filesystem)
+
+```go
+//go:embed files/templates
+var templatesFS embed.FS
+
+// ...
+
+tmpls := templates.New(
+    templates.WithFileSystem(&templatesFS),
+    templates.WithRoot("files/templates"),
+)
+```
+
+#### Custom Root Path
+
+```go
+tmpls := templates.New(
+    templates.WithRoot("my-templates"),
+)
+```
+
+### Error Handling
+
+The library returns structured errors that can be checked using `errors.Is()`:
+
+*   `templates.ErrTemplateNotFound`: The requested template or layout was not found.
+*   `templates.ErrBlockNotFound`: The requested block was not found.
+*   `templates.ErrInvalidBlockName`: The block name format is invalid (must start with `_`).
+
+```go
+err := tmpls.RenderBlockAsHTMLString("_non_existent", nil)
+if errors.Is(err, templates.ErrBlockNotFound) {
+    // Handle missing block
+}
 ```
 
 ## Running the Examples

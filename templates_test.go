@@ -46,7 +46,7 @@ func TestRendering(t *testing.T) {
 		{
 			"LocalFS",
 			func(t *testing.T) *Templates {
-				tmpls := New(nil, nil)
+				tmpls := New()
 				tmpls.MustParseTemplates()
 				return tmpls
 			},
@@ -54,7 +54,7 @@ func TestRendering(t *testing.T) {
 		{
 			"EmbeddedFS",
 			func(t *testing.T) *Templates {
-				tmpls := New(&embededTemplates, nil)
+				tmpls := New(WithFileSystem(&embededTemplates))
 				tmpls.MustParseTemplates()
 				return tmpls
 			},
@@ -208,17 +208,17 @@ func TestRendering(t *testing.T) {
 
 			t.Run("RenderBlockAsHTMLString_Errors", func(t *testing.T) {
 				_, err := tmpls.RenderBlockAsHTMLString("not_starting_with_underscore", "test")
-				if err == nil || !strings.Contains(err.Error(), "blockname needs to start with _") {
-					t.Errorf("Expected error for missing underscore prefix")
+				if !errors.Is(err, ErrInvalidBlockName) {
+					t.Errorf("Expected ErrInvalidBlockName for missing underscore prefix")
 				}
 				_, err = tmpls.RenderBlockAsHTMLString("_", "test")
-				if err == nil || !strings.Contains(err.Error(), "not found in templates-map") {
-					t.Errorf("Expected error for non-existent block")
+				if !errors.Is(err, ErrBlockNotFound) {
+					t.Errorf("Expected ErrBlockNotFound for non-existent block")
 				}
 				longName := "_" + strings.Repeat("a", 255)
 				_, err = tmpls.RenderBlockAsHTMLString(longName, "test")
-				if err == nil || !strings.Contains(err.Error(), "number of characters in string must not exceed 255") {
-					t.Errorf("Expected error for long block name, but got: %v", err)
+				if !errors.Is(err, ErrInvalidBlockName) {
+					t.Errorf("Expected ErrInvalidBlockName for long block name, but got: %v", err)
 				}
 			})
 
@@ -257,8 +257,8 @@ func TestRendering(t *testing.T) {
 
 			t.Run("ExecuteTemplate_EmptyName", func(t *testing.T) {
 				_, err := tmpls.ExecuteTemplateAsText(nil, "", "test")
-				if err == nil || !strings.Contains(err.Error(), "template: name not found ->application:error") {
-					t.Errorf("Expected error for empty template name, but got: %v", err)
+				if !errors.Is(err, ErrTemplateNotFound) {
+					t.Errorf("Expected ErrTemplateNotFound for empty template name, but got: %v", err)
 				}
 			})
 
@@ -277,20 +277,20 @@ func TestRendering(t *testing.T) {
 
 			t.Run("Templates_NotFound", func(t *testing.T) {
 				_, err := tmpls.ExecuteTemplateAsText(nil, "_not_found", "test")
-				if err == nil || !strings.Contains(err.Error(), "template: name not found") {
-					t.Errorf("Expected error for not found block")
+				if !errors.Is(err, ErrTemplateNotFound) {
+					t.Errorf("Expected ErrTemplateNotFound for not found block")
 				}
 				_, err = tmpls.ExecuteTemplateAsText(nil, ":not_found", "test")
-				if err == nil || !strings.Contains(err.Error(), "template: name not found") {
-					t.Errorf("Expected error for not found page")
+				if !errors.Is(err, ErrTemplateNotFound) {
+					t.Errorf("Expected ErrTemplateNotFound for not found page")
 				}
 				_, err = tmpls.ExecuteTemplateAsText(nil, "not_found", "test")
-				if err == nil || !strings.Contains(err.Error(), "template: name not found") {
-					t.Errorf("Expected error for not found page with default layout")
+				if !errors.Is(err, ErrTemplateNotFound) {
+					t.Errorf("Expected ErrTemplateNotFound for not found page with default layout")
 				}
 				_, err = tmpls.ExecuteTemplateAsText(nil, "not_found:sample_page", "test")
-				if err == nil || !strings.Contains(err.Error(), "template: name not found") {
-					t.Errorf("Expected error for not found layout")
+				if !errors.Is(err, ErrTemplateNotFound) {
+					t.Errorf("Expected ErrTemplateNotFound for not found layout")
 				}
 			})
 
@@ -352,7 +352,7 @@ func TestRendering(t *testing.T) {
 
 	// This specific test needs its own setup, so it's outside the loop.
 	t.Run("ExecuteTemplate_WithReload", func(t *testing.T) {
-		tmpls := New(nil, nil)
+		tmpls := New()
 		tmpls.AlwaysReloadAndParseTemplates = true
 		tmpls.MustParseTemplates()
 
@@ -389,7 +389,7 @@ func TestErrorsAndPanics(t *testing.T) {
 				t.Errorf("expected panic message to contain 'provided fsys is not an *embed.FS or nil', but got %q", msg)
 			}
 		}()
-		New(&unsupportedFS{}, nil)
+		New(WithFileSystem(&unsupportedFS{}))
 	})
 
 	t.Run("New_BadEmbedFS", func(t *testing.T) {
@@ -400,7 +400,7 @@ func TestErrorsAndPanics(t *testing.T) {
 		}()
 		// This should succeed, but the returned filesystem is empty.
 		var badFS embed.FS
-		tmpls := New(&badFS, nil)
+		tmpls := New(WithFileSystem(&badFS))
 		tmpls.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 		// This should panic because the required directories are not in the empty FS.
 		tmpls.MustParseTemplates()
@@ -412,7 +412,7 @@ func TestErrorsAndPanics(t *testing.T) {
 				t.Fatal("expected a panic but did not get one")
 			}
 		}()
-		tmpls := New(nil, nil)
+		tmpls := New()
 		tmpls.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 		// Point to a non-existent directory to force a parsing error
 		tmpls.fileSystem = os.DirFS("non-existent-dir")
@@ -436,7 +436,7 @@ func TestErrorsAndPanics(t *testing.T) {
 						t.Errorf("Expected panic for duplicate function %q", tc.name)
 					}
 				}()
-				tmpls := New(nil, template.FuncMap{})
+				tmpls := New(WithFuncMap(template.FuncMap{}))
 				tmpls.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 				tc.setup(tmpls.funcMap)
 				tmpls.AddFuncMapHelpers() // This should panic
@@ -472,7 +472,7 @@ func TestErrorsAndPanics(t *testing.T) {
 		}
 		defer os.Chdir(wd)
 
-		tmpls := New(nil, nil)
+		tmpls := New()
 		// The templates path is now relative to the temp dir parent
 		tmpls.fileSystem = os.DirFS(filepath.Base(dir))
 		err = tmpls.ParseTemplates()
@@ -514,7 +514,7 @@ func TestErrorsAndPanics(t *testing.T) {
 		}
 		defer os.Chdir(wd)
 
-		tmpls := New(nil, nil)
+		tmpls := New()
 		tmpls.AlwaysReloadAndParseTemplates = true
 		tmpls.MustParseTemplates()
 
@@ -537,7 +537,7 @@ func TestErrorsAndPanics(t *testing.T) {
 	})
 
 	t.Run("RenderBlockAsHTMLString_ExecutionError", func(t *testing.T) {
-		tmpls := New(nil, nil)
+		tmpls := New()
 		tmpls.funcMap = template.FuncMap{} // Ensure no unexpected funcs
 		tmpls.templates = make(map[string]*template.Template)
 
@@ -573,7 +573,7 @@ func Test_Locals(t *testing.T) {
 }
 
 func Test_AddFuncMapHelpers_Disabled(t *testing.T) {
-	tpls := New(nil, nil)
+	tpls := New()
 	// Reset the map and disable the helpers to test the conditional logic in AddFuncMapHelpers
 	tpls.funcMap = make(template.FuncMap)
 	tpls.AddHeadlessCMSFuncMapHelpers = false
@@ -633,7 +633,7 @@ func Test_trustedConverters_nil(t *testing.T) {
 }
 
 func Test_parseNewTemplateWithFuncMap_NoFiles(t *testing.T) {
-	tmpls := New(nil, nil) // Need an instance to get fileSystemTrusted
+	tmpls := New() // Need an instance to get fileSystemTrusted
 	_, err := parseNewTemplateWithFuncMap("test", nil, tmpls.fileSystemTrusted)
 	if err == nil || err.Error() != "no files in slice" {
 		t.Errorf(`Expected error for no files, but got: %v`, err)
@@ -744,7 +744,7 @@ func TestParseTemplatesErrors(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer os.RemoveAll(templatesRoot)
-		tmpls := New(nil, nil)
+		tmpls := New()
 		err := tmpls.ParseTemplates()
 		if err == nil || !strings.Contains(err.Error(), "no such file or directory") {
 			t.Errorf("Expected an error for missing layouts folder, but got: %v", err)
@@ -763,7 +763,7 @@ func TestParseTemplatesErrors(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(templatesRoot, "blocks"), 0755); err != nil {
 			t.Fatal(err)
 		}
-		tmpls := New(nil, nil)
+		tmpls := New()
 		err := tmpls.ParseTemplates()
 		if err == nil || err.Error() != "you need at least one layout" {
 			t.Errorf("Expected error for no layouts, but got: %v", err)
@@ -788,7 +788,7 @@ func TestParseTemplatesErrors(t *testing.T) {
 		if err := ioutil.WriteFile(filepath.Join(templatesRoot, "blocks", "mismatch.gohtml"), []byte(`{{define "_actual"}}...{{end}}`), 0644); err != nil {
 			t.Fatal(err)
 		}
-		tmpls := New(nil, nil)
+		tmpls := New()
 		err := tmpls.ParseTemplates()
 		if err == nil || !strings.Contains(err.Error(), "filename doesn't match a definition") {
 			t.Errorf("Expected block name mismatch error, but got: %v", err)
@@ -818,7 +818,7 @@ func TestParseTemplatesErrors(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		tmpls := New(nil, nil)
+		tmpls := New()
 		err := tmpls.ParseTemplates()
 		if err == nil || !strings.Contains(err.Error(), "block already defined as key") {
 			t.Errorf("Expected 'block already defined' error, but got: %v", err)
@@ -826,7 +826,7 @@ func TestParseTemplatesErrors(t *testing.T) {
 	})
 
 	t.Run("getFilePathsInDir readdir error", func(t *testing.T) {
-		tmpls := New(nil, nil)
+		tmpls := New()
 		// This mock now correctly implements fs.FS
 		mockFS := &mockErrorFS{readdirErr: errors.New("forced readdir error")}
 		// The internal `fileSystem` field is an fs.FS, but getFilePathsInDir takes an http.FileSystem
@@ -945,7 +945,7 @@ func Test_NewWithRoot(t *testing.T) {
 	}
 
 	// Initialize with custom root
-	tmpls := NewWithRoot(nil, nil, tmpDir)
+	tmpls := New(WithRoot(tmpDir))
 	tmpls.LayoutsPath = "layouts" // default, but explicit
 	tmpls.PagesPath = "pages"
 	tmpls.MustParseTemplates()
@@ -968,7 +968,7 @@ func Test_NewWithRoot_EmptyPath(t *testing.T) {
 			t.Error("Expected panic for empty root path")
 		}
 	}()
-	NewWithRoot(nil, nil, "")
+	New(WithRoot(""))
 }
 
 func Test_NewWithRoot_Reload(t *testing.T) {
@@ -993,7 +993,7 @@ func Test_NewWithRoot_Reload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tmpls := NewWithRoot(nil, nil, tmpDir)
+	tmpls := New(WithRoot(tmpDir))
 	tmpls.AlwaysReloadAndParseTemplates = true
 	tmpls.MustParseTemplates()
 
@@ -1026,7 +1026,7 @@ func Test_NewWithRoot_Embed(t *testing.T) {
 	// We can use it but with NewWithRoot pointing to "files/templates" explicitly
 	// This proves NewWithRoot works with *embed.FS
 
-	tmpls := NewWithRoot(&embededTemplates, nil, "files/templates")
+	tmpls := New(WithFileSystem(&embededTemplates), WithRoot("files/templates"))
 	tmpls.MustParseTemplates()
 
 	res, err := tmpls.ExecuteTemplateAsText(nil, "person", &Person{Name: "Embed", Age: 42})
@@ -1056,7 +1056,7 @@ func Test_Concurrency(t *testing.T) {
 	ioutil.WriteFile(filepath.Join(layoutsDir, "app.gohtml"), []byte("{{define \"layout\"}}{{block \"page\" .}}{{end}}{{end}}"), 0644)
 	ioutil.WriteFile(filepath.Join(pagesDir, "idx.gohtml"), []byte("{{define \"page\"}}Page{{end}}"), 0644)
 
-	tmpls := NewWithRoot(nil, nil, tmpDir)
+	tmpls := New(WithRoot(tmpDir))
 	tmpls.MustParseTemplates()
 
 	var wg sync.WaitGroup
@@ -1105,21 +1105,18 @@ func Test_Concurrency(t *testing.T) {
 }
 
 func Test_d_block_Error(t *testing.T) {
-	tmpls := New(nil, nil)
-	// We don't parse templates, so map is empty
+	tmpls := New() // No templates parsed, so map is empty
 
 	// Case 1: Block not found
 	_, err := tmpls.RenderBlockAsHTMLString("_missing", nil)
-	if err == nil {
-		t.Error("Expected error for missing block")
-	} else if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("Expected 'not found' error, got %v", err)
+	if !errors.Is(err, ErrBlockNotFound) {
+		t.Errorf("Expected ErrBlockNotFound, got %v", err)
 	}
 
 	// Case 2: Invalid name (no underscore)
 	_, err = tmpls.RenderBlockAsHTMLString("no_underscore", nil)
-	if err == nil {
-		t.Error("Expected error for invalid block name")
+	if !errors.Is(err, ErrInvalidBlockName) {
+		t.Errorf("Expected ErrInvalidBlockName, got %v", err)
 	}
 }
 
@@ -1128,7 +1125,7 @@ func Test_ContextHelpers(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
 
-	tmpls := New(nil, nil)
+	tmpls := New()
 	tmpls.Logger = logger
 
 	ctx := context.Background()
@@ -1167,7 +1164,7 @@ func Test_ContextHelpers(t *testing.T) {
 		ioutil.WriteFile(filepath.Join(layoutDir, "main.gohtml"), []byte(`{{define "layout"}}{{ trusted_html_ctx .Ctx "<b>Bold</b>" }}{{end}}`), 0644)
 		ioutil.WriteFile(filepath.Join(tmpDir, "pages", "index.gohtml"), []byte(`{{define "page"}}Page{{end}}`), 0644)
 
-		tmpls := NewWithRoot(nil, nil, tmpDir)
+		tmpls := New(WithRoot(tmpDir))
 		tmpls.Logger = logger
 		if err := tmpls.ParseTemplates(); err != nil {
 			t.Fatalf("ParseTemplates failed: %v", err)

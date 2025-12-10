@@ -4,11 +4,9 @@
 package chi
 
 import (
-	"io/fs"
 	"net/http"
 
 	"github.com/dryaf/templates"
-	"github.com/google/safehtml/template"
 )
 
 // Renderer provides a wrapper around templates.Templates for net/http compatible
@@ -17,12 +15,10 @@ type Renderer struct {
 	*templates.Templates
 }
 
-// NewTemplatesRenderer creates a new Renderer with the given filesystem and function map.
+// NewTemplatesRenderer creates a new Renderer with the given options.
 // It is a convenience wrapper around templates.New that returns a chi-compatible renderer.
-// Pass nil for fsys to use the local operating system filesystem. For production,
-// an embed.FS is recommended.
-func NewTemplatesRenderer(fsys fs.FS, fnMap template.FuncMap) *Renderer {
-	return &Renderer{templates.New(fsys, fnMap)}
+func NewTemplatesRenderer(opts ...templates.Option) *Renderer {
+	return &Renderer{templates.New(opts...)}
 }
 
 // FromTemplates creates a new Renderer from an existing templates.Templates instance.
