@@ -16,6 +16,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -152,6 +153,7 @@ func (t *Templates) AddFuncMapHelpers() {
 		t.AddDynamicBlockToFuncMap()
 		t.addTrustedConverterFuncs()
 		t.AddLocalsToFuncMap()
+		t.AddReferencesToFuncMap()
 	}
 }
 
@@ -392,6 +394,19 @@ func (t *Templates) AddLocalsToFuncMap() {
 	t.funcMap["locals"] = Locals
 }
 
+// AddReferencesToFuncMap adds the 'references' function to the FuncMap. This helper
+// provides a convenient way to create a `map[string]any` inside a template,
+// where all values are pointers.
+// Usage: `{{ block "_myblock" (references "key1" "value1" "key2" 2) }}`
+func (t *Templates) AddReferencesToFuncMap() {
+	_, ok := t.funcMap["references"]
+	if ok {
+		t.Logger.Error("function name is already in use in FuncMap", "name", "references")
+		panic("function name 'references' is already in use in FuncMap")
+	}
+	t.funcMap["references"] = References
+}
+
 // HandlerRenderWithData returns a http.HandlerFunc that renders a template with
 // the provided static data.
 func (t *Templates) HandlerRenderWithData(templateName string, data interface{}) func(w http.ResponseWriter, r *http.Request) {
@@ -496,6 +511,37 @@ func Locals(args ...any) map[string]any {
 			key = arg
 		} else {
 			m[fmt.Sprint(key)] = arg
+		}
+	}
+	return m
+}
+
+// References is a template helper function that creates a map[string]any from a
+// sequence of key-value pairs. Unlike Locals, it ensures that every value in
+// the map is a pointer. If a value is already a pointer, it is used as is.
+// If it is not a pointer, a new pointer to the value is created.
+func References(args ...any) map[string]any {
+	m := map[string]any{}
+	var key any
+	for i, arg := range args {
+		if i%2 == 0 {
+			key = arg
+		} else {
+			// Ensure we have a pointer to the value
+			val := reflect.ValueOf(arg)
+			var ptr any
+			if !val.IsValid() {
+				// Handle nil input
+				ptr = nil
+			} else if val.Kind() == reflect.Ptr {
+				ptr = arg
+			} else {
+				// Create a new pointer to a copy of the value
+				p := reflect.New(val.Type())
+				p.Elem().Set(val)
+				ptr = p.Interface()
+			}
+			m[fmt.Sprint(key)] = ptr
 		}
 	}
 	return m

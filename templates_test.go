@@ -837,3 +837,84 @@ func TestParseTemplatesErrors(t *testing.T) {
 		}
 	})
 }
+
+func Test_References(t *testing.T) {
+	val := 42
+	ptrVal := &val
+
+	refs := References(
+		"int", 10,
+		"string", "hello",
+		"ptr_int", ptrVal,
+	)
+
+	// Check "int"
+	if p, ok := refs["int"].(*int); ok {
+		if *p != 10 {
+			t.Errorf("Expected *int to be 10, got %d", *p)
+		}
+	} else {
+		t.Errorf("Expected 'int' to be *int, got %T", refs["int"])
+	}
+
+	// Check "string"
+	if p, ok := refs["string"].(*string); ok {
+		if *p != "hello" {
+			t.Errorf("Expected *string to be 'hello', got %s", *p)
+		}
+	} else {
+		t.Errorf("Expected 'string' to be *string, got %T", refs["string"])
+	}
+
+	// Check "ptr_int" - should remain *int, not **int
+	if p, ok := refs["ptr_int"].(*int); ok {
+		if p != ptrVal {
+			t.Errorf("Expected pointer address to match original")
+		}
+		if *p != 42 {
+			t.Errorf("Expected *ptr_int to be 42, got %d", *p)
+		}
+	} else {
+		t.Errorf("Expected 'ptr_int' to be *int, got %T", refs["ptr_int"])
+	}
+}
+
+func Test_References_Complex(t *testing.T) {
+	type MyStruct struct{ Name string }
+	s := MyStruct{Name: "test"}
+	slice := []int{1, 2, 3}
+
+	refs := References(
+		"nil", nil,
+		"struct", s,
+		"slice", slice,
+	)
+
+	// Check "nil"
+	if val := refs["nil"]; val != nil {
+		t.Errorf("Expected nil for 'nil' key, got %v", val)
+	}
+
+	// Check "struct" - should be *MyStruct
+	if p, ok := refs["struct"].(*MyStruct); ok {
+		if p.Name != "test" {
+			t.Errorf("Expected struct field Name to be 'test', got %s", p.Name)
+		}
+		// Modify pointer to check it's a copy
+		p.Name = "modified"
+		if s.Name == "modified" {
+			t.Errorf("Expected independent copy, but original was modified")
+		}
+	} else {
+		t.Errorf("Expected 'struct' to be *MyStruct, got %T", refs["struct"])
+	}
+
+	// Check "slice" - should be *[]int
+	if p, ok := refs["slice"].(*[]int); ok {
+		if len(*p) != 3 {
+			t.Errorf("Expected slice length 3, got %d", len(*p))
+		}
+	} else {
+		t.Errorf("Expected 'slice' to be *[]int, got %T", refs["slice"])
+	}
+}
