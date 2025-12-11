@@ -69,3 +69,45 @@ deps-update:
 		(cd $$dir && go get -u ./... && go mod tidy); \
 	'
 	@echo "Dependency update complete."
+
+# Release automation
+.PHONY: release
+release:
+	@if [ -z "$(VERSION)" ]; then \
+		LATEST_TAG=$$(git describe --tags --match "v[0-9]*" --abbrev=0 2>/dev/null || echo "v0.0.0"); \
+		echo "Usage: make release VERSION=vX.Y.Z"; \
+		echo "Latest tag: $$LATEST_TAG"; \
+		MAJOR=$$(echo $$LATEST_TAG | awk -F. '{print $$1}'); \
+		MINOR=$$(echo $$LATEST_TAG | awk -F. '{print $$2}'); \
+		PATCH=$$(echo $$LATEST_TAG | awk -F. '{print $$3}'); \
+		NEXT_PATCH=$$(($$PATCH + 1)); \
+		echo "Suggested:  make release VERSION=$$MAJOR.$$MINOR.$$NEXT_PATCH"; \
+		exit 1; \
+	fi
+	@echo "Releasing version $(VERSION)..."
+	# Tag the root module
+	git tag $(VERSION)
+	# Update integration modules to use the new version
+	@for dir in integrations/*; do \
+		if [ -d "$$dir" ]; then \
+			echo "Updating $$dir to use $(VERSION)..."; \
+			(cd $$dir && go mod edit -require github.com/dryaf/templates@$(VERSION)); \
+			(cd $$dir && go mod tidy); \
+		fi \
+	done
+	# Commit the dependency updates
+	git add integrations/*/go.mod integrations/*/go.sum
+	git commit -m "chore: update integrations to $(VERSION)" || echo "No changes to commit"
+	# Tag the integration modules
+	@for dir in integrations/*; do \
+		if [ -d "$$dir" ]; then \
+			MODULE_NAME=$$(basename $$dir); \
+			TAG_NAME="integrations/$$MODULE_NAME/$(VERSION)"; \
+			echo "Tagging $$TAG_NAME"; \
+			git tag $$TAG_NAME; \
+		fi \
+	done
+	@echo "Release ready. To push:"
+	@echo "git push origin main"
+	@echo "git push origin $(VERSION)"
+	@echo "git push --tags"
