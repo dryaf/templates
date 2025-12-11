@@ -315,9 +315,13 @@ The `integrations/stdlib` package provides a simple renderer for use with `net/h
 import "github.com/dryaf/templates/integrations/stdlib"
 
 // --- inside main ---
-tmpls := templates.New(nil, nil) // or with embed.FS for production
-tmpls.MustParseTemplates()
-renderer := stdlib.FromTemplates(tmpls)
+// Create the renderer, configuring the underlying templates instance with functional options
+renderer := stdlib.New(
+    templates.WithReload(true), // Example option: enable hot-reloading
+    // For production, you might use:
+    // templates.WithFileSystem(&templatesFS),
+    // templates.WithRoot("files/templates"),
+)
 
 // Use it in an http.HandlerFunc
 http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

@@ -4,11 +4,9 @@
 package stdlib
 
 import (
-	"io/fs"
 	"net/http"
 
 	"github.com/dryaf/templates"
-	"github.com/google/safehtml/template"
 )
 
 // Renderer provides a wrapper around templates.Templates for net/http.
@@ -16,12 +14,10 @@ type Renderer struct {
 	*templates.Templates
 }
 
-// New creates a new Renderer with the given filesystem and function map.
-// It is a convenience wrapper around templates.New, using functional options.
-// Pass nil for fsys to use the local operating system filesystem. For production,
-// an embed.FS is recommended.
-func New(fsys fs.FS, fnMap template.FuncMap) *Renderer {
-	return &Renderer{templates.New(templates.WithFileSystem(fsys), templates.WithFuncMap(fnMap))}
+// New creates a new Renderer with the given options.
+// It is a convenience wrapper around templates.New.
+func New(opts ...templates.Option) *Renderer {
+	return &Renderer{templates.New(opts...)}
 }
 
 // FromTemplates creates a new Renderer from an existing templates.Templates instance.

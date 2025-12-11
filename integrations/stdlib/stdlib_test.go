@@ -66,7 +66,7 @@ func setup(t *testing.T) *Renderer {
 func TestNewTemplatesRendererAndFromTemplates(t *testing.T) {
 	t.Run("NewTemplatesRenderer", func(t *testing.T) {
 		// We pass a nil embed.FS because we are testing construction, not parsing.
-		renderer := New(nil, template.FuncMap{"testFunc": func() string { return "hello" }})
+		renderer := New(templates.WithFuncMap(template.FuncMap{"testFunc": func() string { return "hello" }}))
 		if renderer == nil {
 			t.Fatal("NewTemplatesRenderer returned nil")
 		}
