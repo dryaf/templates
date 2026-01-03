@@ -1,9 +1,11 @@
 .vscode
 experiments
-_prompt_ignore.txt
+
+.prompt
+_prompt_response.txt
 _prompt.txt
 coverage.out
-_prompt_remote_files.txt
+
 _examples/chi/files
 _examples/chirender/files
 _examples/echo/files
