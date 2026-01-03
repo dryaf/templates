@@ -16,6 +16,7 @@ This library provides a simple, opinionated framework around `safehtml/template`
 ## Features
 
 - **Secure by Default**: Built on `safehtml/template` to provide contextual, automatic output escaping.
+- **Optional Security Relaxing**: Disable `safehtml` for rapid prototyping or projects using HTMX when the strict type system becomes a hindrance.
 - **Layouts, Pages, and Blocks**: Organizes templates into a familiar and powerful structure. Render pages within different layouts, or render blocks individually.
 - **Live Reloading**: Automatically re-parses templates on every request for a seamless development experience.
 - **Production-Ready**: Uses Go's `embed.FS` to compile all templates and assets into a single binary for production deployments.
@@ -82,9 +83,9 @@ import "github.com/dryaf/templates"
     )
 
     func main() {
-    	// For development, New(nil, nil) uses the local file system.
+    	// For development, New() uses the local file system.
     	// For production, you would pass in an embed.FS.
-    	tmpls := templates.New(nil, nil)
+    	tmpls := templates.New()
     	tmpls.AlwaysReloadAndParseTemplates = true // Recommended for development
     	tmpls.MustParseTemplates()
 
@@ -105,13 +106,26 @@ import "github.com/dryaf/templates"
 
 ### Configuration
 
-The `New` function now accepts **Functional Options** for flexible configuration:
+The `New` function accepts **Functional Options** for flexible configuration:
 
 -   `WithFileSystem(fs fs.FS)`: Sets the filesystem (OS or Embed).
 -   `WithRoot(path string)`: Sets the root directory for templates.
 -   `WithFuncMap(fm template.FuncMap)`: Adds custom helper functions.
 -   `WithReload(enabled bool)`: Enables auto-reloading for development.
+-   `WithDisableSafeHTML(disabled bool)`: Disables the `safehtml` engine and falls back to standard `text/template`.
+-   `WithDisableTrustedLog(disabled bool)`: Disables INFO logs when using `trusted_*_ctx` helpers.
 -   `WithLogger(logger *slog.Logger)`: Sets a custom logger.
+
+#### Rapid Prototyping Mode
+
+If you find `safehtml`'s strict type system too restrictive during early development, or for projects that don't require high security (like internal tools using HTMX), you can disable it. The engine will use `text/template`, and the `trusted_*` functions will act as literal passthroughs for your raw data.
+
+```go
+tmpls := templates.New(
+    templates.WithDisableSafeHTML(true),
+    templates.WithDisableTrustedLog(true), // Suppress info logs for bypasses
+)
+```
 
 #### Dev Mode (OS Filesystem)
 
@@ -136,14 +150,6 @@ tmpls := templates.New(
 )
 ```
 
-#### Custom Root Path
-
-```go
-tmpls := templates.New(
-    templates.WithRoot("my-templates"),
-)
-```
-
 ### Error Handling
 
 The library returns structured errors that can be checked using `errors.Is()`:
@@ -158,26 +164,6 @@ if errors.Is(err, templates.ErrBlockNotFound) {
     // Handle missing block
 }
 ```
-
-## Running the Examples
-
-The project includes a comprehensive set of runnable examples in the `_examples` directory. To run them:
-
-1.  **Set up the template files:** The examples use a shared set of templates. A `Makefile` target is provided to copy them into place. From the project root, run:
-    ```shell
-    make setup-examples
-    ```
-
-2.  **Run an example:** Navigate to any example directory and run it.
-    ```shell
-    cd _examples/chi
-    go run .
-    ```
-
-3.  **Clean up:** To remove the copied template files, run:
-    ```shell
-    make clean-examples
-    ```
 
 ## Core Concepts
 
@@ -273,6 +259,8 @@ Sometimes, you receive data from a trusted source (like a headless CMS) that you
 </div>
 ```
 
+**Note:** If `DisableSafeHTML` is enabled, these functions will simply return your objects as-is, allowing them to bypass the standard auto-escaper.
+
 ### Context-Aware Helpers
 
 For structured logging and auditing, this library provides context-aware versions of `d_block` and `trusted_*` functions. These helpers require a `context.Context` as the first argument.
@@ -305,6 +293,8 @@ Usage:
 {{ trusted_html_ctx .Ctx "<b>Bold Content</b>" }}
 ```
 
+You can disable these logs using `WithDisableTrustedLog(true)`.
+
 ## Integrations
 
 ### `net/http` (stdlib)
@@ -318,9 +308,6 @@ import "github.com/dryaf/templates/integrations/stdlib"
 // Create the renderer, configuring the underlying templates instance with functional options
 renderer := stdlib.New(
     templates.WithReload(true), // Example option: enable hot-reloading
-    // For production, you might use:
-    // templates.WithFileSystem(&templatesFS),
-    // templates.WithRoot("files/templates"),
 )
 
 // Use it in an http.HandlerFunc
@@ -389,3 +376,5 @@ Feel free to open an issue to suggest features or improvements.
 ## License
 
 This project is licensed under the MIT License.
+
+```

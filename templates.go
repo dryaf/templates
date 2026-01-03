@@ -1,4 +1,3 @@
-// ==== File: templates.go ====
 // Package templates provides a secure, file-system-based Go template engine
 // built on Google's safehtml/template library.
 //
@@ -15,6 +14,17 @@
 // Using safehtml/template ensures that your output is free from XSS vulnerabilities by default.
 // Context-aware escaping is applied automatically. For cases where you strictly trust the input
 // (e.g. from a CMS), special helper functions `trusted_*` are provided.
+//
+// # Rapid Prototyping and HTMX
+//
+// If the strictness of safehtml is an obstacle during development or for projects using
+// libraries like HTMX where security models might differ, it can be disabled via
+// the DisableSafeHTML configuration. In this mode, the engine falls back to the
+// standard library's text/template (producing literal output), and trusted_*
+// functions return objects as-is.
+//
+// Logging for trusted helper usage can also be disabled via DisableTrustedLog to
+// reduce noise in projects that use them frequently.
 package templates
 
 import (
@@ -34,6 +44,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	text_template "text/template"
 
 	"github.com/google/safehtml"
 	"github.com/google/safehtml/template"
@@ -68,6 +80,15 @@ type Templates struct {
 	// This is highly recommended for development to see changes without restarting
 	// the application, but should be disabled in production for performance.
 	AlwaysReloadAndParseTemplates bool
+
+	// If true, disables the use of safehtml/template and uses standard text/template instead.
+	// This is useful for rapid prototyping or for projects where safehtml is not required.
+	// When true, NO auto-escaping occurs, and trusted_* functions return objects as-is.
+	DisableSafeHTML bool
+
+	// If true, suppresses the INFO log message normally generated when a
+	// trusted_*_ctx helper function is used.
+	DisableTrustedLog bool
 
 	// The name of the default layout file (without extension) to use when a
 	// layout is not explicitly specified in the template name.
@@ -111,7 +132,7 @@ type Templates struct {
 	rootPath string
 	inputFS  fs.FS
 
-	templates     map[string]*template.Template
+	templates     map[string]any
 	templatesLock sync.RWMutex
 }
 
@@ -145,6 +166,21 @@ func WithFuncMap(fm template.FuncMap) Option {
 func WithReload(enabled bool) Option {
 	return func(t *Templates) {
 		t.AlwaysReloadAndParseTemplates = enabled
+	}
+}
+
+// WithDisableSafeHTML enables or disables the use of safehtml/template.
+// When disabled, the standard library's text/template is used for literal output.
+func WithDisableSafeHTML(disabled bool) Option {
+	return func(t *Templates) {
+		t.DisableSafeHTML = disabled
+	}
+}
+
+// WithDisableTrustedLog enables or disables INFO logs for trusted helpers.
+func WithDisableTrustedLog(disabled bool) Option {
+	return func(t *Templates) {
+		t.DisableTrustedLog = disabled
 	}
 }
 
@@ -252,7 +288,7 @@ func (t *Templates) ParseTemplates() error {
 
 // parseTemplates is the internal implementation that expects the caller to hold the lock.
 func (t *Templates) parseTemplates() error {
-	t.templates = make(map[string]*template.Template)
+	t.templates = make(map[string]any)
 	hfs := http.FS(t.fileSystem)
 	layouts, err := getFilePathsInDir(hfs, t.LayoutsPath, t.fileSystemIsEmbed)
 	if err != nil {
@@ -278,7 +314,7 @@ func (t *Templates) parseTemplates() error {
 			layoutName := strings.TrimSuffix(layoutFilename, path.Ext(layoutFilename))
 			pageFilename := filepath.Base(pageFilePath)
 			pageName := strings.TrimSuffix(pageFilename, path.Ext(pageFilename))
-			newTemplate, err := parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystemTrusted, files...)
+			newTemplate, err := t.parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystemTrusted, files...)
 			if err != nil {
 				return fmt.Errorf("%s: %w", pageName, err)
 			}
@@ -290,7 +326,7 @@ func (t *Templates) parseTemplates() error {
 		files := append(blocks, pageFilePath) // blocks and this one page file will end up in a template
 		pageFilename := filepath.Base(pageFilePath)
 		pageName := strings.TrimSuffix(pageFilename, path.Ext(pageFilename))
-		newTemplate, err := parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystemTrusted, files...)
+		newTemplate, err := t.parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystemTrusted, files...)
 		if err != nil {
 			return fmt.Errorf("%s: %w", pageName, err)
 		}
@@ -300,7 +336,7 @@ func (t *Templates) parseTemplates() error {
 	for _, blockFilePath := range blocks {
 		blockFilename := filepath.Base(blockFilePath)
 		blockName := strings.TrimSuffix(blockFilename, path.Ext(blockFilename))
-		newTemplate, err := parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystemTrusted, blockFilePath)
+		newTemplate, err := t.parseNewTemplateWithFuncMap("", t.funcMap, t.fileSystemTrusted, blockFilePath)
 		if err != nil {
 			return fmt.Errorf("%s: %w", blockFilePath, err)
 		}
@@ -318,14 +354,27 @@ func (t *Templates) parseTemplates() error {
 	return nil
 }
 
-func definedTemplatesContain(t *template.Template, name string) bool {
-	templates := t.Templates()
-	for _, tmpl := range templates {
-		if tmpl.Tree == nil || tmpl.Tree.Root.Pos == 0 {
-			continue
+func definedTemplatesContain(tmpl any, name string) bool {
+	switch t := tmpl.(type) {
+	case *template.Template:
+		templates := t.Templates()
+		for _, tmpl := range templates {
+			if tmpl.Tree == nil || tmpl.Tree.Root.Pos == 0 {
+				continue
+			}
+			if tmpl.Name() == name {
+				return true
+			}
 		}
-		if tmpl.Name() == name {
-			return true
+	case *text_template.Template:
+		templates := t.Templates()
+		for _, tmpl := range templates {
+			if tmpl.Tree == nil || tmpl.Tree.Root.Pos == 0 {
+				continue
+			}
+			if tmpl.Name() == name {
+				return true
+			}
 		}
 	}
 	return false
@@ -400,38 +449,50 @@ func (t *Templates) ExecuteTemplate(w io.Writer, r *http.Request, templateName s
 		return fmt.Errorf("%w: %s", ErrTemplateNotFound, lookupName)
 	}
 
-	return tmpl.ExecuteTemplate(w, execName, data)
+	switch tt := tmpl.(type) {
+	case *template.Template:
+		return tt.ExecuteTemplate(w, execName, data)
+	case *text_template.Template:
+		return tt.ExecuteTemplate(w, execName, data)
+	default:
+		return fmt.Errorf("unsupported template type: %T", tmpl)
+	}
 }
 
-// RenderBlockAsHTMLString renders a specific block to a safehtml.HTML string.
+// RenderBlockAsHTMLString renders a specific block to a safehtml.HTML string (or raw string if safehtml is disabled).
 // This is useful for rendering partials inside other logic. The block name must
 // start with an underscore "_".
-func (t *Templates) RenderBlockAsHTMLString(name string, data interface{}) (safehtml.HTML, error) {
+func (t *Templates) RenderBlockAsHTMLString(name string, data interface{}) (any, error) {
 	if !strings.HasPrefix(name, "_") {
-		return safehtml.HTML{}, fmt.Errorf("%w: blockname needs to start with _", ErrInvalidBlockName)
+		return nil, fmt.Errorf("%w: blockname needs to start with _", ErrInvalidBlockName)
 	}
 	if len(name) > 255 {
-		return safehtml.HTML{}, fmt.Errorf("%w: number of characters in string must not exceed 255", ErrInvalidBlockName)
+		return nil, fmt.Errorf("%w: number of characters in string must not exceed 255", ErrInvalidBlockName)
 	}
 	b := bytes.Buffer{}
-	tt, ok := t.templates[name]
+	ttRaw, ok := t.templates[name]
 	if !ok {
-		return safehtml.HTML{}, fmt.Errorf("%w: template %s not found in templates-map", ErrBlockNotFound, name)
+		return nil, fmt.Errorf("%w: template %s not found in templates-map", ErrBlockNotFound, name)
 	}
-	err := tt.ExecuteTemplate(&b, name, data)
 
+	var err error
+	if t.DisableSafeHTML {
+		tt := ttRaw.(*text_template.Template)
+		err = tt.ExecuteTemplate(&b, name, data)
+		return b.String(), err
+	}
+
+	tt := ttRaw.(*template.Template)
+	err = tt.ExecuteTemplate(&b, name, data)
 	return uncheckedconversions.HTMLFromStringKnownToSatisfyTypeContract(b.String()), err
 }
 
 // RenderBlockAsHTMLStringWithContext renders a block to HTML string and logs errors
 // with the provided context. Registered as 'd_block_ctx'.
-func (t *Templates) RenderBlockAsHTMLStringWithContext(ctx context.Context, blockname string, payload interface{}) (safehtml.HTML, error) {
+func (t *Templates) RenderBlockAsHTMLStringWithContext(ctx context.Context, blockname string, payload interface{}) (any, error) {
 	html, err := t.RenderBlockAsHTMLString(blockname, payload)
 	if err != nil {
 		t.Logger.ErrorContext(ctx, "d_block_ctx failed", "block", blockname, "error", err)
-	} else {
-		// Optional: Log success if robust tracing is desired, but might be too verbose.
-		// t.Logger.DebugContext(ctx, "d_block_ctx rendered", "block", blockname)
 	}
 	return html, err
 }
@@ -461,8 +522,8 @@ func (t *Templates) AddDynamicBlockCtxToFuncMap() {
 }
 
 // addTrustedConverterFuncs adds the 'trusted_*' functions to the FuncMap.
-// These functions wrap strings in the appropriate `safehtml` types, preventing
-// them from being escaped. Use these only when you are certain the content is
+// These functions wrap strings in the appropriate `safehtml` types (or return them as-is if disabled),
+// preventing them from being escaped. Use these only when you are certain the content is
 // from a trusted source and is safe to render verbatim.
 func (t *Templates) addTrustedConverterFuncs() {
 	add := func(name string, f any) {
@@ -473,13 +534,24 @@ func (t *Templates) addTrustedConverterFuncs() {
 		t.funcMap[name] = f
 	}
 
-	add("trusted_html", trustedHTML)
-	add("trusted_script", trustedScript)
-	add("trusted_style", trustedStyle)
-	add("trusted_stylesheet", trustedStyleSheet)
-	add("trusted_url", trustedURL)
-	add("trusted_resource_url", trustedResourceURL)
-	add("trusted_identifier", trustedIdentifier)
+	if t.DisableSafeHTML {
+		passthrough := func(v any) any { return v }
+		add("trusted_html", passthrough)
+		add("trusted_script", passthrough)
+		add("trusted_style", passthrough)
+		add("trusted_stylesheet", passthrough)
+		add("trusted_url", passthrough)
+		add("trusted_resource_url", passthrough)
+		add("trusted_identifier", passthrough)
+	} else {
+		add("trusted_html", trustedHTML)
+		add("trusted_script", trustedScript)
+		add("trusted_style", trustedStyle)
+		add("trusted_stylesheet", trustedStyleSheet)
+		add("trusted_url", trustedURL)
+		add("trusted_resource_url", trustedResourceURL)
+		add("trusted_identifier", trustedIdentifier)
+	}
 }
 
 // addTrustedConverterFuncsWithContext adds 'trusted_*_ctx' functions that log their usage.
@@ -492,43 +564,74 @@ func (t *Templates) addTrustedConverterFuncsWithContext() {
 		t.funcMap[name] = f
 	}
 
-	// Helpers that log the event
-	trustedHTMLCtx := func(ctx context.Context, s string) safehtml.HTML {
-		t.Logger.InfoContext(ctx, "trusted_html_ctx called", "content_preview", firstN(s, 50))
-		return trustedHTML(s)
-	}
-	trustedScriptCtx := func(ctx context.Context, s string) safehtml.Script {
-		t.Logger.InfoContext(ctx, "trusted_script_ctx called", "content_preview", firstN(s, 50))
-		return trustedScript(s)
-	}
-	trustedStyleCtx := func(ctx context.Context, s string) safehtml.Style {
-		t.Logger.InfoContext(ctx, "trusted_style_ctx called", "content_preview", firstN(s, 50))
-		return trustedStyle(s)
-	}
-	trustedStyleSheetCtx := func(ctx context.Context, s string) safehtml.StyleSheet {
-		t.Logger.InfoContext(ctx, "trusted_stylesheet_ctx called", "content_preview", firstN(s, 50))
-		return trustedStyleSheet(s)
-	}
-	trustedURLCtx := func(ctx context.Context, s string) safehtml.URL {
-		t.Logger.InfoContext(ctx, "trusted_url_ctx called", "url", s)
-		return trustedURL(s)
-	}
-	trustedResourceURLCtx := func(ctx context.Context, s string) safehtml.TrustedResourceURL {
-		t.Logger.InfoContext(ctx, "trusted_resource_url_ctx called", "url", s)
-		return trustedResourceURL(s)
-	}
-	trustedIdentifierCtx := func(ctx context.Context, s string) safehtml.Identifier {
-		t.Logger.InfoContext(ctx, "trusted_identifier_ctx called", "identifier", s)
-		return trustedIdentifier(s)
-	}
+	if t.DisableSafeHTML {
+		passthroughCtx := func(ctx context.Context, v any) any {
+			if !t.DisableTrustedLog {
+				s := fmt.Sprint(v)
+				t.Logger.InfoContext(ctx, "trusted_helper_ctx called", "content_preview", firstN(s, 50))
+			}
+			return v
+		}
+		add("trusted_html_ctx", passthroughCtx)
+		add("trusted_script_ctx", passthroughCtx)
+		add("trusted_style_ctx", passthroughCtx)
+		add("trusted_stylesheet_ctx", passthroughCtx)
+		add("trusted_url_ctx", passthroughCtx)
+		add("trusted_resource_url_ctx", passthroughCtx)
+		add("trusted_identifier_ctx", passthroughCtx)
+	} else {
+		// Helpers that log the event
+		trustedHTMLCtx := func(ctx context.Context, s string) safehtml.HTML {
+			if !t.DisableTrustedLog {
+				t.Logger.InfoContext(ctx, "trusted_html_ctx called", "content_preview", firstN(s, 50))
+			}
+			return trustedHTML(s)
+		}
+		trustedScriptCtx := func(ctx context.Context, s string) safehtml.Script {
+			if !t.DisableTrustedLog {
+				t.Logger.InfoContext(ctx, "trusted_script_ctx called", "content_preview", firstN(s, 50))
+			}
+			return trustedScript(s)
+		}
+		trustedStyleCtx := func(ctx context.Context, s string) safehtml.Style {
+			if !t.DisableTrustedLog {
+				t.Logger.InfoContext(ctx, "trusted_style_ctx called", "content_preview", firstN(s, 50))
+			}
+			return trustedStyle(s)
+		}
+		trustedStyleSheetCtx := func(ctx context.Context, s string) safehtml.StyleSheet {
+			if !t.DisableTrustedLog {
+				t.Logger.InfoContext(ctx, "trusted_stylesheet_ctx called", "content_preview", firstN(s, 50))
+			}
+			return trustedStyleSheet(s)
+		}
+		trustedURLCtx := func(ctx context.Context, s string) safehtml.URL {
+			if !t.DisableTrustedLog {
+				t.Logger.InfoContext(ctx, "trusted_url_ctx called", "url", s)
+			}
+			return trustedURL(s)
+		}
+		trustedResourceURLCtx := func(ctx context.Context, s string) safehtml.TrustedResourceURL {
+			if !t.DisableTrustedLog {
+				t.Logger.InfoContext(ctx, "trusted_resource_url_ctx called", "url", s)
+			}
+			return trustedResourceURL(s)
+		}
+		trustedIdentifierCtx := func(ctx context.Context, s string) safehtml.Identifier {
+			if !t.DisableTrustedLog {
+				t.Logger.InfoContext(ctx, "trusted_identifier_ctx called", "identifier", s)
+			}
+			return trustedIdentifier(s)
+		}
 
-	add("trusted_html_ctx", trustedHTMLCtx)
-	add("trusted_script_ctx", trustedScriptCtx)
-	add("trusted_style_ctx", trustedStyleCtx)
-	add("trusted_stylesheet_ctx", trustedStyleSheetCtx)
-	add("trusted_url_ctx", trustedURLCtx)
-	add("trusted_resource_url_ctx", trustedResourceURLCtx)
-	add("trusted_identifier_ctx", trustedIdentifierCtx)
+		add("trusted_html_ctx", trustedHTMLCtx)
+		add("trusted_script_ctx", trustedScriptCtx)
+		add("trusted_style_ctx", trustedStyleCtx)
+		add("trusted_stylesheet_ctx", trustedStyleSheetCtx)
+		add("trusted_url_ctx", trustedURLCtx)
+		add("trusted_resource_url_ctx", trustedResourceURLCtx)
+		add("trusted_identifier_ctx", trustedIdentifierCtx)
+	}
 }
 
 func firstN(s string, n int) string {
@@ -734,18 +837,22 @@ func getFilePathsInDir(fs http.FileSystem, dirPath string, prefixTemplatesPath b
 	return files, nil
 }
 
-func parseNewTemplateWithFuncMap(layout string, fnMap template.FuncMap, fs template.TrustedFS, files ...string) (*template.Template, error) {
+func (t *Templates) parseNewTemplateWithFuncMap(layout string, fnMap template.FuncMap, fsys template.TrustedFS, files ...string) (any, error) {
 	if len(files) == 0 {
 		return nil, errors.New("no files in slice")
 	}
-	t := template.New(layout).Funcs(fnMap)
 
-	t, err := t.ParseFS(fs, files...)
-	if err != nil {
-		return nil, err
+	if t.DisableSafeHTML {
+		fm := make(text_template.FuncMap, len(fnMap))
+		for k, v := range fnMap {
+			fm[k] = v
+		}
+		tmpl := text_template.New(layout).Funcs(fm)
+		return tmpl.ParseFS(t.fileSystem, files...)
 	}
 
-	return t, nil
+	tmpl := template.New(layout).Funcs(fnMap)
+	return tmpl.ParseFS(fsys, files...)
 }
 
 // cleanPath returns the canonical path for p, eliminating . and .. elements.

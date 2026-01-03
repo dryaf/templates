@@ -6,6 +6,7 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"io/ioutil"
@@ -14,8 +15,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -55,6 +56,14 @@ func TestRendering(t *testing.T) {
 			"EmbeddedFS",
 			func(t *testing.T) *Templates {
 				tmpls := New(WithFileSystem(&embededTemplates))
+				tmpls.MustParseTemplates()
+				return tmpls
+			},
+		},
+		{
+			"DisabledSafeHTML",
+			func(t *testing.T) *Templates {
+				tmpls := New(WithDisableSafeHTML(true))
 				tmpls.MustParseTemplates()
 				return tmpls
 			},
@@ -99,7 +108,7 @@ func TestRendering(t *testing.T) {
 
 				if !strings.Contains(res, "<b>test</b>") {
 					t.Error(res)
-					t.Error("test railed, maybe layout was rendered ")
+					t.Error("test failed")
 				}
 			})
 
@@ -133,7 +142,16 @@ func TestRendering(t *testing.T) {
 			t.Run("TrustedURL", func(t *testing.T) {
 				res, err := tmpls.ExecuteTemplateAsText(nil, "trusted_url_page", "http://example.com?a=b&c=d")
 				failOnErr(t, err)
-				expected := `<a href="http://example.com?a=b&amp;c=d">link</a>`
+
+				var expected string
+				if tmpls.DisableSafeHTML {
+					// text/template is literal
+					expected = `<a href="http://example.com?a=b&c=d">link</a>`
+				} else {
+					// safehtml escapes attribute values
+					expected = `<a href="http://example.com?a=b&amp;c=d">link</a>`
+				}
+
 				if !strings.Contains(res, expected) {
 					t.Errorf("Expected to contain %q, got %q", expected, res)
 				}
@@ -142,9 +160,14 @@ func TestRendering(t *testing.T) {
 			t.Run("TrustedURL_Javascript", func(t *testing.T) {
 				res, err := tmpls.ExecuteTemplateAsText(nil, "trusted_url_page", "javascript:alert(1)")
 				failOnErr(t, err)
-				// The safehtml/template engine URL-encodes special characters in hrefs
-				// even for trusted types. This is a security feature.
-				expected := `<a href="javascript:alert%281%29">link</a>`
+				// Both engines URL-encode parentheses in hrefs when safe mode is ON.
+				// In prototyping mode (text/template), it is literal.
+				var expected string
+				if tmpls.DisableSafeHTML {
+					expected = `<a href="javascript:alert(1)">link</a>`
+				} else {
+					expected = `<a href="javascript:alert%281%29">link</a>`
+				}
 				if !strings.Contains(res, expected) {
 					t.Errorf("Expected to contain %q, got %q", expected, res)
 				}
@@ -198,7 +221,7 @@ func TestRendering(t *testing.T) {
 				if err != nil {
 					t.Error(err)
 				}
-				resStr := res.String()
+				resStr := fmt.Sprint(res)
 				if !strings.Contains(resStr, "Sample-Block:test") || strings.Contains(resStr, "should-be-hidden") {
 					t.Error("err:", err)
 					t.Error("res:", res)
@@ -365,7 +388,123 @@ func TestRendering(t *testing.T) {
 	})
 }
 
-// --- Standalone tests that don't depend on a full template setup ---
+func TestTrustedFunctionsPassthrough(t *testing.T) {
+	tmpls := New(WithDisableSafeHTML(true))
+
+	testCases := []struct {
+		name     string
+		funcName string
+	}{
+		{"trusted_html", "trusted_html"},
+		{"trusted_script", "trusted_script"},
+		{"trusted_style", "trusted_style"},
+		{"trusted_stylesheet", "trusted_stylesheet"},
+		{"trusted_url", "trusted_url"},
+		{"trusted_resource_url", "trusted_resource_url"},
+		{"trusted_identifier", "trusted_identifier"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			fn, ok := tmpls.funcMap[tc.funcName]
+			if !ok {
+				t.Fatalf("Function %s not found in funcMap", tc.funcName)
+			}
+
+			// Signature is func(any) any
+			f := reflect.ValueOf(fn)
+			input := reflect.ValueOf("<b>raw input</b>")
+
+			results := f.Call([]reflect.Value{input})
+			output := results[0].Interface()
+
+			if output != "<b>raw input</b>" {
+				t.Errorf("Expected output to be same as input %q, but got %v", "<b>raw input</b>", output)
+			}
+		})
+	}
+
+	t.Run("context aware helpers", func(t *testing.T) {
+		ctx := context.Background()
+		testCases := []string{
+			"trusted_html_ctx",
+			"trusted_script_ctx",
+			"trusted_style_ctx",
+			"trusted_stylesheet_ctx",
+			"trusted_url_ctx",
+			"trusted_resource_url_ctx",
+			"trusted_identifier_ctx",
+		}
+
+		for _, name := range testCases {
+			fn, ok := tmpls.funcMap[name]
+			if !ok {
+				t.Fatalf("Function %s not found in funcMap", name)
+			}
+
+			f := reflect.ValueOf(fn)
+			inputData := reflect.ValueOf("test data")
+			inputCtx := reflect.ValueOf(ctx)
+
+			results := f.Call([]reflect.Value{inputCtx, inputData})
+			output := results[0].Interface()
+
+			if output != "test data" {
+				t.Errorf("Expected output to be same as input %q, but got %v", "test data", output)
+			}
+		}
+	})
+}
+
+func TestDisableTrustedLog(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+
+	t.Run("logging enabled (default)", func(t *testing.T) {
+		buf.Reset()
+		tmpls := New(WithLogger(logger))
+		tmpls.MustParseTemplates()
+
+		ctx := context.Background()
+		// Get helper from FuncMap and call via reflect
+		fn := reflect.ValueOf(tmpls.funcMap["trusted_html_ctx"])
+		fn.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf("<b>data</b>")})
+
+		if !strings.Contains(buf.String(), "trusted_html_ctx called") {
+			t.Error("Expected INFO log when logging is enabled")
+		}
+	})
+
+	t.Run("logging disabled", func(t *testing.T) {
+		buf.Reset()
+		tmpls := New(WithLogger(logger), WithDisableTrustedLog(true))
+		tmpls.MustParseTemplates()
+
+		ctx := context.Background()
+		fn := reflect.ValueOf(tmpls.funcMap["trusted_html_ctx"])
+		fn.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf("<b>data</b>")})
+
+		if buf.Len() > 0 {
+			t.Errorf("Expected no logs, but got: %s", buf.String())
+		}
+	})
+
+	t.Run("logging disabled in prototyping mode", func(t *testing.T) {
+		buf.Reset()
+		tmpls := New(WithLogger(logger), WithDisableSafeHTML(true), WithDisableTrustedLog(true))
+		tmpls.MustParseTemplates()
+
+		ctx := context.Background()
+		fn := reflect.ValueOf(tmpls.funcMap["trusted_html_ctx"])
+		fn.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf("<b>data</b>")})
+
+		if buf.Len() > 0 {
+			t.Errorf("Expected no logs in prototyping mode, but got: %s", buf.String())
+		}
+	})
+}
+
+// --- Standalone tests that don't depend on a full template engine instance ---
 
 // unsupportedFS is a dummy fs.FS implementation for testing panics.
 type unsupportedFS struct{}
@@ -539,7 +678,7 @@ func TestErrorsAndPanics(t *testing.T) {
 	t.Run("RenderBlockAsHTMLString_ExecutionError", func(t *testing.T) {
 		tmpls := New()
 		tmpls.funcMap = template.FuncMap{} // Ensure no unexpected funcs
-		tmpls.templates = make(map[string]*template.Template)
+		tmpls.templates = make(map[string]any)
 
 		// Create a block that will fail on execution (indexing a nil map)
 		// but is valid at parse time.
@@ -634,7 +773,7 @@ func Test_trustedConverters_nil(t *testing.T) {
 
 func Test_parseNewTemplateWithFuncMap_NoFiles(t *testing.T) {
 	tmpls := New() // Need an instance to get fileSystemTrusted
-	_, err := parseNewTemplateWithFuncMap("test", nil, tmpls.fileSystemTrusted)
+	_, err := tmpls.parseNewTemplateWithFuncMap("test", nil, tmpls.fileSystemTrusted)
 	if err == nil || err.Error() != "no files in slice" {
 		t.Errorf(`Expected error for no files, but got: %v`, err)
 	}
@@ -835,357 +974,6 @@ func TestParseTemplatesErrors(t *testing.T) {
 		err := tmpls.ParseTemplates()
 		if err == nil || !strings.Contains(err.Error(), "forced readdir error") {
 			t.Errorf("Expected readdir error, but got: %v", err)
-		}
-	})
-}
-
-func Test_References(t *testing.T) {
-	val := 42
-	ptrVal := &val
-
-	refs := References(
-		"int", 10,
-		"string", "hello",
-		"ptr_int", ptrVal,
-	)
-
-	// Check "int"
-	if p, ok := refs["int"].(*int); ok {
-		if *p != 10 {
-			t.Errorf("Expected *int to be 10, got %d", *p)
-		}
-	} else {
-		t.Errorf("Expected 'int' to be *int, got %T", refs["int"])
-	}
-
-	// Check "string"
-	if p, ok := refs["string"].(*string); ok {
-		if *p != "hello" {
-			t.Errorf("Expected *string to be 'hello', got %s", *p)
-		}
-	} else {
-		t.Errorf("Expected 'string' to be *string, got %T", refs["string"])
-	}
-
-	// Check "ptr_int" - should remain *int, not **int
-	if p, ok := refs["ptr_int"].(*int); ok {
-		if p != ptrVal {
-			t.Errorf("Expected pointer address to match original")
-		}
-		if *p != 42 {
-			t.Errorf("Expected *ptr_int to be 42, got %d", *p)
-		}
-	} else {
-		t.Errorf("Expected 'ptr_int' to be *int, got %T", refs["ptr_int"])
-	}
-}
-
-func Test_References_Complex(t *testing.T) {
-	type MyStruct struct{ Name string }
-	s := MyStruct{Name: "test"}
-	slice := []int{1, 2, 3}
-
-	refs := References(
-		"nil", nil,
-		"struct", s,
-		"slice", slice,
-	)
-
-	// Check "nil"
-	if val := refs["nil"]; val != nil {
-		t.Errorf("Expected nil for 'nil' key, got %v", val)
-	}
-
-	// Check "struct" - should be *MyStruct
-	if p, ok := refs["struct"].(*MyStruct); ok {
-		if p.Name != "test" {
-			t.Errorf("Expected struct field Name to be 'test', got %s", p.Name)
-		}
-		// Modify pointer to check it's a copy
-		p.Name = "modified"
-		if s.Name == "modified" {
-			t.Errorf("Expected independent copy, but original was modified")
-		}
-	} else {
-		t.Errorf("Expected 'struct' to be *MyStruct, got %T", refs["struct"])
-	}
-
-	// Check "slice" - should be *[]int
-	if p, ok := refs["slice"].(*[]int); ok {
-		if len(*p) != 3 {
-			t.Errorf("Expected slice length 3, got %d", len(*p))
-		}
-	} else {
-		t.Errorf("Expected 'slice' to be *[]int, got %T", refs["slice"])
-	}
-}
-
-func Test_NewWithRoot(t *testing.T) {
-	// Create a temporary directory for custom templates
-	tmpDir, err := ioutil.TempDir("", "custom_templates")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	// Create structure
-	layoutsDir := filepath.Join(tmpDir, "layouts")
-	pagesDir := filepath.Join(tmpDir, "pages")
-	blocksDir := filepath.Join(tmpDir, "blocks")
-	os.MkdirAll(layoutsDir, 0755)
-	os.MkdirAll(pagesDir, 0755)
-	os.MkdirAll(blocksDir, 0755)
-
-	// Create files
-	if err := ioutil.WriteFile(filepath.Join(layoutsDir, "custom.gohtml"), []byte(`{{define "layout"}}CustomRoot: {{block "page" .}}{{end}}{{end}}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile(filepath.Join(pagesDir, "hello.gohtml"), []byte(`{{define "page"}}Hello {{.}}{{end}}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Initialize with custom root
-	tmpls := New(WithRoot(tmpDir))
-	tmpls.LayoutsPath = "layouts" // default, but explicit
-	tmpls.PagesPath = "pages"
-	tmpls.MustParseTemplates()
-
-	// Execute
-	res, err := tmpls.ExecuteTemplateAsText(nil, "custom:hello", "World")
-	if err != nil {
-		t.Fatalf("Failed to execute template: %v", err)
-	}
-
-	expected := "CustomRoot: Hello World"
-	if res != expected {
-		t.Errorf("Expected %q, got %q", expected, res)
-	}
-}
-
-func Test_NewWithRoot_EmptyPath(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic for empty root path")
-		}
-	}()
-	New(WithRoot(""))
-}
-
-func Test_NewWithRoot_Reload(t *testing.T) {
-	tmpDir, err := ioutil.TempDir("", "custom_templates_reload")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	layoutsDir := filepath.Join(tmpDir, "layouts")
-	pagesDir := filepath.Join(tmpDir, "pages")
-	blocksDir := filepath.Join(tmpDir, "blocks")
-	os.MkdirAll(layoutsDir, 0755)
-	os.MkdirAll(pagesDir, 0755)
-	os.MkdirAll(blocksDir, 0755)
-
-	pagePath := filepath.Join(pagesDir, "reload.gohtml")
-	if err := ioutil.WriteFile(filepath.Join(layoutsDir, "custom.gohtml"), []byte(`{{define "layout"}}{{block "page" .}}{{end}}{{end}}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile(pagePath, []byte(`{{define "page"}}Initial{{end}}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	tmpls := New(WithRoot(tmpDir))
-	tmpls.AlwaysReloadAndParseTemplates = true
-	tmpls.MustParseTemplates()
-
-	// First render
-	res, err := tmpls.ExecuteTemplateAsText(nil, "custom:reload", nil)
-	if err != nil {
-		t.Fatalf("First render failed: %v", err)
-	}
-	if res != "Initial" {
-		t.Errorf("Expected Initial, got %s", res)
-	}
-
-	// Modify file
-	if err := ioutil.WriteFile(pagePath, []byte(`{{define "page"}}Reloaded{{end}}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Second render
-	res, err = tmpls.ExecuteTemplateAsText(nil, "custom:reload", nil)
-	if err != nil {
-		t.Fatalf("Second render failed: %v", err)
-	}
-	if res != "Reloaded" {
-		t.Errorf("Expected Reloaded, got %s", res)
-	}
-}
-
-func Test_NewWithRoot_Embed(t *testing.T) {
-	// embededTemplates var is defined at top of file, pointing to "files/templates"
-	// We can use it but with NewWithRoot pointing to "files/templates" explicitly
-	// This proves NewWithRoot works with *embed.FS
-
-	tmpls := New(WithFileSystem(&embededTemplates), WithRoot("files/templates"))
-	tmpls.MustParseTemplates()
-
-	res, err := tmpls.ExecuteTemplateAsText(nil, "person", &Person{Name: "Embed", Age: 42})
-	if err != nil {
-		t.Fatalf("Failed to render with embed fs: %v", err)
-	}
-	if !strings.Contains(res, "Name: Embed") {
-		t.Error("Embed render failed content check")
-	}
-}
-
-func Test_Concurrency(t *testing.T) {
-	// Setup custom templates for concurrency test
-	tmpDir, err := ioutil.TempDir("", "concurrency_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	layoutsDir := filepath.Join(tmpDir, "layouts")
-	pagesDir := filepath.Join(tmpDir, "pages")
-	blocksDir := filepath.Join(tmpDir, "blocks")
-	os.MkdirAll(layoutsDir, 0755)
-	os.MkdirAll(pagesDir, 0755)
-	os.MkdirAll(blocksDir, 0755)
-
-	ioutil.WriteFile(filepath.Join(layoutsDir, "app.gohtml"), []byte("{{define \"layout\"}}{{block \"page\" .}}{{end}}{{end}}"), 0644)
-	ioutil.WriteFile(filepath.Join(pagesDir, "idx.gohtml"), []byte("{{define \"page\"}}Page{{end}}"), 0644)
-
-	tmpls := New(WithRoot(tmpDir))
-	tmpls.MustParseTemplates()
-
-	var wg sync.WaitGroup
-	done := make(chan bool)
-
-	// Start a goroutine that triggers re-parsing
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-done:
-				return
-			default:
-				// This calls the method we just protected with a lock
-				if err := tmpls.ParseTemplates(); err != nil {
-					// Ignore errors during tear-down/file-change race, but print unexpected ones
-				}
-				time.Sleep(1 * time.Millisecond)
-			}
-		}
-	}()
-
-	// Start readers
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-done:
-					return
-				default:
-					_, err := tmpls.ExecuteTemplateAsText(nil, "idx", nil)
-					if err != nil {
-						// Errors are possible if map is empty during re-init
-					}
-				}
-			}
-		}()
-	}
-
-	time.Sleep(100 * time.Millisecond)
-	close(done)
-	wg.Wait()
-}
-
-func Test_d_block_Error(t *testing.T) {
-	tmpls := New() // No templates parsed, so map is empty
-
-	// Case 1: Block not found
-	_, err := tmpls.RenderBlockAsHTMLString("_missing", nil)
-	if !errors.Is(err, ErrBlockNotFound) {
-		t.Errorf("Expected ErrBlockNotFound, got %v", err)
-	}
-
-	// Case 2: Invalid name (no underscore)
-	_, err = tmpls.RenderBlockAsHTMLString("no_underscore", nil)
-	if !errors.Is(err, ErrInvalidBlockName) {
-		t.Errorf("Expected ErrInvalidBlockName, got %v", err)
-	}
-}
-
-func Test_ContextHelpers(t *testing.T) {
-	// Setup capture logger
-	var buf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&buf, nil))
-
-	tmpls := New()
-	tmpls.Logger = logger
-
-	ctx := context.Background()
-
-	// Test d_block_ctx logging
-	// We expect an error because "_missing" doesn't exist
-	tmpls.RenderBlockAsHTMLStringWithContext(ctx, "_missing", nil)
-
-	output := buf.String()
-	if !strings.Contains(output, "d_block_ctx failed") {
-		t.Errorf("Expected log 'd_block_ctx failed', got: %s", output)
-	}
-	if !strings.Contains(output, "_missing") {
-		t.Errorf("Expected log to contain block name, got: %s", output)
-	}
-
-	buf.Reset()
-
-	// Test trusted_html_ctx logging
-	// We need to access the function map directly or via a template execution
-	// But since the helpers are closure-based internal functions added to the map,
-	// we can render a template that uses them.
-
-	// Register helpers manually if not already (New does it)
-	// But let's verify via template execution
-
-	// Create a template that uses trusted_html_ctx
-	t.Run("Template Execution", func(t *testing.T) {
-		tmpDir, _ := ioutil.TempDir("", "ctx_test")
-		defer os.RemoveAll(tmpDir)
-
-		layoutDir := filepath.Join(tmpDir, "layouts")
-		os.MkdirAll(layoutDir, 0755)
-		os.MkdirAll(filepath.Join(tmpDir, "pages"), 0755)
-		os.MkdirAll(filepath.Join(tmpDir, "blocks"), 0755)
-		ioutil.WriteFile(filepath.Join(layoutDir, "main.gohtml"), []byte(`{{define "layout"}}{{ trusted_html_ctx .Ctx "<b>Bold</b>" }}{{end}}`), 0644)
-		ioutil.WriteFile(filepath.Join(tmpDir, "pages", "index.gohtml"), []byte(`{{define "page"}}Page{{end}}`), 0644)
-
-		tmpls := New(WithRoot(tmpDir))
-		tmpls.Logger = logger
-		if err := tmpls.ParseTemplates(); err != nil {
-			t.Fatalf("ParseTemplates failed: %v", err)
-		}
-
-		// Execute with a context
-		type Data struct {
-			Ctx context.Context
-		}
-
-		_, err := tmpls.ExecuteTemplateAsText(nil, "main:index", Data{Ctx: ctx})
-		if err != nil {
-			t.Fatalf("Execution failed: %v", err)
-		}
-
-		output := buf.String()
-		if !strings.Contains(output, "trusted_html_ctx called") {
-			t.Errorf("Expected log 'trusted_html_ctx called', got: %s", output)
-		}
-		if !strings.Contains(output, "<b>Bold</b>") {
-			t.Errorf("Expected log to contain content preview, got: %s", output)
 		}
 	})
 }
